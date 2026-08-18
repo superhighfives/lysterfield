@@ -14,3 +14,10 @@ dist-ssr
 
 # Claude
 .claude/settings.local.json
+
+# Cog model weights — large binaries, not committed. See models/*/README.md.
+models/**/*.pkl
+models/**/*.pth
+models/**/.cog
+models/**/__pycache__
+models/**/output.png

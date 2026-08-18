@@ -1,0 +1,12 @@
+build:
+  gpu: false
+  python_version: "3.10"
+  python_packages:
+    - "setuptools<81"
+    - torch==1.12.0
+    - torchvision==0.13.0
+    - numpy==1.21.5
+    - fastai==1.0.61
+    - pillow==9.5.0
+    - matplotlib==3.7.1
+predict: "predict.py:Predictor"
