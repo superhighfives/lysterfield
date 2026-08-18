@@ -19,8 +19,9 @@ jobs:
     # same way. Repo-specific rules go in CLAUDE.md.
     uses: superhighfives/control-room/.github/workflows/review.yml@main
     with:
-      setup_command: npm install
+      runtime: bun
+      setup_command: bun install --frozen-lockfile
       verify_commands: |
-        npm run lint --workspace=apps/client
+        bun run --cwd apps/client lint
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

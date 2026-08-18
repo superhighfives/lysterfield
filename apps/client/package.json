@@ -12,10 +12,10 @@
     "preview": "vite preview",
     "test": "vitest",
     "generate": "node scripts/generate-dreams.js",
-    "deploy": "npm run generate && npm run build-staging && rclone sync dist r2:lysterfield-lake --progress --transfers 24 --exclude-from ~/.gitignore_global",
+    "deploy": "bun run generate && bun run build-staging && rclone sync dist r2:lysterfield-lake --progress --transfers 24 --exclude-from ~/.gitignore_global",
     "deploy-dreams": "rclone sync dreams r2:lysterfield-lake-dreams --progress --transfers 24 --exclude-from ~/.gitignore_global",
-    "deploy-prod": "npm run generate && npm run build && wrangler pages deploy dist --project-name lysterfield-lake",
-    "postinstall": "npm run generate"
+    "deploy-prod": "bun run generate && bun run build && wrangler pages deploy dist --project-name lysterfield-lake",
+    "postinstall": "bun run generate"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.0.10",

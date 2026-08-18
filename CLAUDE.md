@@ -5,10 +5,13 @@ This file is the repo-specific part.
 
 ## Layout
 
-npm workspaces: `apps/client` (Vite/React/R3F player) and `apps/pipeline`
+Bun workspaces: `apps/client` (Vite/React/R3F player) and `apps/pipeline`
 (Node/TS CLI, Replicate-driven, not yet ported — see
 `plans/in-progress/rebuild-pipeline-as-replicate-cli.md`). Install and run
-workspace scripts from the repo root with `npm run <script> --workspace=apps/<name>`.
+workspace scripts from the repo root with `bun run --cwd apps/<name> <script>`.
+`bunfig.toml` pins the hoisted linker — bun's default isolated linker's
+node_modules layout breaks `eslint-import-resolver-typescript`'s module
+resolution. Don't remove that setting without re-checking lint still passes.
 
 ## Generated assets — never commit
 

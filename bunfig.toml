@@ -1,0 +1,5 @@
+[install]
+# Isolated (bun's default) linker's node_modules layout confuses
+# eslint-import-resolver-typescript's module resolution. Hoisted matches
+# npm/yarn classic and avoids spurious import/no-unresolved lint errors.
+linker = "hoisted"

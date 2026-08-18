@@ -16,8 +16,8 @@ architecture and phasing behind this repo.
 
 ## Workspace
 
-npm workspaces, one package per `apps/*`. Install from the root:
+Bun workspaces, one package per `apps/*`. Install from the root:
 
 ```sh
-npm install
+bun install
 ```
