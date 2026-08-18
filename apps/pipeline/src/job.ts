@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, readdir, stat } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
@@ -12,8 +12,17 @@ export interface Job {
   fps: number
 }
 
+/** Creates a new job, persisting its metadata to `<dir>/job.json` so `loadJob` can pick it up later. */
 export async function createJob(dir: string, fps = 60): Promise<Job> {
   await mkdir(dir, { recursive: true })
+  const job = { dir, fps }
+  await writeFile(path.join(dir, 'job.json'), JSON.stringify({ fps }))
+  return job
+}
+
+/** Loads a job previously created with `createJob` — for CLI invocations that run one step at a time. */
+export async function loadJob(dir: string): Promise<Job> {
+  const { fps } = JSON.parse(await readFile(path.join(dir, 'job.json'), 'utf8'))
   return { dir, fps }
 }
 
