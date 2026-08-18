@@ -1,0 +1,16 @@
+node_modules
+.turbo
+dist
+dist-ssr
+*.local
+
+# macOS
+.DS_Store
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Claude
+.claude/settings.local.json

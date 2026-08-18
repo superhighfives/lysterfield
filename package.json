@@ -1,0 +1,11 @@
+{
+  "name": "lysterfield",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "devDependencies": {
+    "turbo": "^1.10.9"
+  }
+}

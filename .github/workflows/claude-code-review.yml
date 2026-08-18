@@ -1,0 +1,26 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+# A called workflow can only narrow the caller's permissions, never widen them.
+# Without this block the run fails at startup before any job is created.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+jobs:
+  review:
+    # Standard lives in superhighfives/control-room so every repo reviews the
+    # same way. Repo-specific rules go in CLAUDE.md.
+    uses: superhighfives/control-room/.github/workflows/review.yml@main
+    with:
+      setup_command: npm install
+      verify_commands: |
+        npm run lint --workspace=apps/client
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
