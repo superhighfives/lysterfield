@@ -429,12 +429,20 @@ apps/<name> <script>`; CI workflow updated to `runtime: bun`.
   `dreams.json`'s `prompt` field, which is just UI display text — the real
   per-scene prompts to reuse for comparison live in
   `video-final/dreaming/<id>/{prompt.txt,<id>_settings.txt}` on the drive.
-- **Outline model hosting**: no public Replicate deployment of ArtLine
-  turned up in a search — confirm whether a community Cog port exists;
-  otherwise package one of the `video-artline/*.pkl` checkpoints as a
-  private Cog model (straightforward — the inference code already exists on
-  the drive). Only fall back to an off-the-shelf substitute if packaging
-  turns out to be more trouble than expected. Resolve during Phase 2.
+- **Resolved — outline model hosting** (2026-08-17, phase 2): no community
+  Replicate port of ArtLine exists — confirmed via Replicate's search API
+  and general web search across many query variants (line drawing, sketch,
+  pencil portrait, outline drawing, cjwbw's whole catalog). Packaged
+  `video-artline/torch_650.pkl` (the checkpoint `other.py` actually loaded
+  in production, not the `_920` or fastai-learner variants) as a private Cog
+  model at `models/outline/`. Validated locally with `cog predict` — loads,
+  and produces correct line art on both the ArtLine-torch sample fixture and
+  a real production frame. `fastai` is a required runtime dependency purely
+  for pickle's class resolution (the checkpoint is `torch.save(learn.model,
+  ...)`, a pickled fastai `DynamicUnet`) — nothing in `predict.py` calls
+  fastai's API. Not pushed to Replicate yet — deferred to phase 3 when
+  `outline.ts` needs a live endpoint (flip `gpu: true` in `cog.yaml` first;
+  local validation ran CPU-only).
 - **Dreaming model choice**: Kling 3.0 Omni vs. Grok Imagine (or another
   Replicate video model) as the Deforum replacement — needs a side-by-side
   visual comparison against an existing published scene, plus a look at
