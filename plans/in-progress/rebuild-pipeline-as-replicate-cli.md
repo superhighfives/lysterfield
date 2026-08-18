@@ -443,18 +443,58 @@ apps/<name> <script>`; CI workflow updated to `runtime: bun`.
   fastai's API. Not pushed to Replicate yet — deferred to phase 3 when
   `outline.ts` needs a live endpoint (flip `gpu: true` in `cog.yaml` first;
   local validation ran CPU-only).
-- **Dreaming model choice**: Kling 3.0 Omni vs. Grok Imagine (or another
-  Replicate video model) as the Deforum replacement — needs a side-by-side
-  visual comparison against an existing published scene, plus a look at
-  cost/generation-time per scene at each. Resolve during Phase 2. If neither
-  holds up visually, fall back to porting the original Deforum + curation +
-  interpolation lane as-is.
-- **Cost/concurrency budget**: no figure yet for how many Replicate calls a
-  full scene actually needs. Much smaller now if dreaming becomes a single
-  per-scene call rather than thousands of per-frame ones — still worth a
-  rough estimate during Phase 2 for the remaining per-frame steps
-  (artwork/background/matte/depth/upscale/outline) before committing to
-  full 60fps.
+- **Resolved — dreaming model choice** (2026-08-17/18, phase 2): both
+  candidates hold up — the Deforum-fallback path is not needed. Prototyped
+  against scene `20230808103741` ("Watercolour"), using its real prompt
+  ("a detailed watercolor painting of a lake at dawn with sunlight through
+  trees, trending on Artstation", from `video-final/dreaming/20230808103741/
+  20230808103741_settings.txt`, not `dreams.json`'s display caption — for
+  this scene those two are actually different scenes' captions, which is
+  exactly the mismatch the plan already flagged), its real `colormatch_image`
+  (an Unsplash photo, used only as a warm dawn/dusk **colour** reference —
+  the prompt explicitly said not to borrow its literal content), a source
+  frame pulled from the single shared `main.mov`, and an explicit "no
+  people/faces/human figures" instruction folded into the prompt text (no
+  negative-prompt field on either model) to match the original's
+  waifu-avoidance negative prompting.
+
+  **Kling 3.0 Omni** (`kwaivgi/kling-v3-omni-video`, `start_image` +
+  `prompt` + `reference_images`): the real photo dissolves into a richly
+  textured watercolor scene (visible paper-texture edges, individual light
+  rays, brushstroke variation) within about a second, settling into a result
+  close in character to the original 2023 Deforum output for the rest of the
+  clip — and with no trace of the source person. This is also the more
+  architecturally faithful replacement: Deforum's own settings
+  (`use_init`, `strength: 0.65`, `hybrid_composite: true`) show it was
+  already diffusing real source frames into painted style, not generating
+  from scratch — `start_image` is the same mechanism. Slower (316s
+  predict time for a 5s/720p/standard/no-audio clip) and pricier (~$0.84
+  for that clip per third-party pricing comparisons — Replicate doesn't
+  expose per-prediction cost via the API — roughly ~$2.50/scene at 15s).
+
+  **Grok Imagine** (`xai/grok-imagine-r2v`, `reference_images` only — its
+  own docs say these are "style and content references, not starting
+  frames"): a clean, independently-generated painterly landscape, strong
+  prompt/style fidelity, subtle ambient motion (drifting light, shimmering
+  water), no unwanted people — closer to a flat illustration than Kling's
+  textured watercolor, and doesn't use the literal source footage as a
+  starting point. Much faster (32s predict time) and cheaper (~$0.25 for
+  the same clip, ~10x faster and ~3x cheaper than Kling).
+
+  **Decision: Kling 3.0 Omni as the primary/default**, on the strength of
+  its `start_image` mechanism matching what Deforum was actually doing and
+  its closer visual match to the original hand-crafted aesthetic — the
+  per-scene cost difference is trivial either way against the old
+  GPU-time-plus-manual-curation cost. Keep Grok Imagine available as a
+  cheaper/faster option, worth revisiting if per-scene cost or generation
+  time becomes a real constraint at full-catalogue scale, or for scenes
+  that don't need literal continuity with the source footage.
+- **Cost/concurrency budget**: dreaming is confirmed as one Replicate call
+  per scene either way (not per-frame), so its cost is a rounding error
+  regardless of which model — the actual remaining unknown is the per-frame
+  steps (artwork/background/matte/depth/upscale/outline) at up to 60fps;
+  still worth a rough estimate before committing to full frame rate, but not
+  done as part of phase 2 since it didn't block either model decision.
 - **The `output-outro` matte run**: purpose unconfirmed (a special extra
   scene outside the normal per-song set?) — low priority, only worth
   chasing if something in the final video doesn't reproduce cleanly during
