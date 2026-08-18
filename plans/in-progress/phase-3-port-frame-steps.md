@@ -62,7 +62,18 @@ than trusting the old HTTP call shapes:
 Current `latest_version` ids (informational — pin at implementation time,
 don't hardcode into this spec as they can move): `gwang-kim/diffusionclip`
 `a64682eb…`, `cjwbw/zoedepth` `6375723d…`, `cjwbw/real-esrgan` `d0ee3d70…`,
-`arielreplicate/robust_video_matting` `73d2128a…`.
+`arielreplicate/robust_video_matting` `73d2128a…`, `jd7h/propainter`
+`e5ea7ae0…`.
+
+**Version pinning turned out not to be optional.** Discovered while
+smoke-testing `matte.ts`: the `"owner/name"` latest-version shorthand (both
+`replicate.run()` without a version and the `/v1/models/{owner}/{name}/
+predictions` REST endpoint it calls) 404s for every single model this
+pipeline uses — confirmed against all five. Only the explicit
+`"owner/name:version"` form (or `/v1/predictions` with a `version` field)
+works. Not something the parent plan's design anticipated — `replicate.ts`
+and every step must always call through a pinned identifier; see
+`src/models.ts` for the single source of truth.
 
 **`background-plate` has no direct legacy equivalent to port** — the old
 approach (`pc-settings/script.sh` + `video-inpaint-anything/

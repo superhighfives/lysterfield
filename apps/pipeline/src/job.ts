@@ -24,11 +24,11 @@ export async function framesDir(job: Job, name: string): Promise<string> {
   return dir
 }
 
-/** Ensures `<job.dir>/video/` exists and returns the path for `<name>.mov`. */
-export async function videoPath(job: Job, name: string): Promise<string> {
+/** Ensures `<job.dir>/video/` exists and returns the path for `<name>.<ext>` (default `mov`). */
+export async function videoPath(job: Job, name: string, ext = 'mov'): Promise<string> {
   const dir = path.join(job.dir, 'video')
   await mkdir(dir, { recursive: true })
-  return path.join(dir, `${name}.mov`)
+  return path.join(dir, `${name}.${ext}`)
 }
 
 /**
