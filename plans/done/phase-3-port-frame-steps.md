@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: scaffold apps/pipeline and port init/matte/background-plate/depth/artwork/background/upscale"
-status: In Progress
+status: Complete
 created: 2026-08-18
 updated: 2026-08-18
 ---
@@ -216,33 +216,35 @@ name against a small local input and inspect the output — not a full
 
 ## Tasks
 
-- [ ] Scaffold `apps/pipeline` (package.json, tsconfig.json, `.env.example`,
+- [x] Scaffold `apps/pipeline` (package.json, tsconfig.json, `.env.example`,
       `src/` layout)
-- [ ] `replicate.ts` — auth, create + poll predictions
-- [ ] `job.ts` — working directory, concurrency cap, skip-if-exists,
+- [x] `replicate.ts` — auth, create + poll predictions
+- [x] `job.ts` — working directory, concurrency cap, skip-if-exists,
       compile-frames-to-video helper
-- [ ] `init.ts` — crop/scale/extract, compile original + full reference
+- [x] `init.ts` — crop/scale/extract, compile original + full reference
       videos
-- [ ] `matte.ts` — Robust Video Matting, alpha-mask output, frame extraction
-- [ ] `background-plate.ts` — ProPainter driven by the matte's alpha video
-- [ ] `artwork.ts` — DiffusionCLIP, shared function for artwork + background
+- [x] `matte.ts` — Robust Video Matting, alpha-mask output, frame extraction
+- [x] `background-plate.ts` — per-frame LaMa (ProPainter, the original
+      pick, turned out not to work at all — see Architecture)
+- [x] `artwork.ts` — DiffusionCLIP, shared function for artwork + background
       panels
-- [ ] `depth.ts` — transparent-composite preprocessing, ZoeDepth call,
+- [x] `depth.ts` — transparent-composite preprocessing, ZoeDepth call,
       gamma + rescale-intensity postprocessing
-- [ ] `upscale.ts` — Real-ESRGAN, called against both artwork outputs
-- [ ] Minimal `cli.ts` to run one step in isolation against a small local
+- [x] `upscale.ts` — Real-ESRGAN, called against both artwork outputs
+- [x] Minimal `cli.ts` to run one step in isolation against a small local
       input
-- [ ] Smoke-test each step against a real frame/short clip (e.g. from the
-      external drive's `main.mov`) before considering the phase done
+- [x] Smoke-test each step against a real frame/short clip (e.g. from the
+      external drive's `main.mov`) before considering the phase done —
+      ran the full chain end to end via the CLI, not just each step alone
 
 ## Open questions
 
-- **Real-ESRGAN's `upscale` factor**: the old pipeline used a named
-  `version` preset (`General - RealESRGANplus`) that no longer exists on
-  the live model; the replacement is a numeric `upscale` factor (default
-  `4`). Worth a quick visual check against an old upscaled frame from the
-  external drive before locking in `4` — flag during implementation, not
-  blocking the start of this phase.
+- **Resolved — Real-ESRGAN's `upscale` factor**: `4` (the model's default)
+  confirmed good visually — DiffusionCLIP's native 512×512 output upscales
+  cleanly to 2048×2048, sharp with no artifacting. That's larger than the
+  legacy pipeline ever needed (its compiled reference videos were all
+  scaled to 1024-wide) — fine, since final sizing happens in phase 4's
+  `compose.ts` hstack regardless of how much headroom upscale produces.
 - **Resolved — `background-plate` model**: ProPainter doesn't work at all —
   its Cog wrapper's mask-extension validation fails against every
   Replicate-hosted file URL, reproduced via raw API calls with clean,
@@ -258,3 +260,61 @@ name against a small local input and inspect the output — not a full
   legacy SAM step's own `--dilate-kernel-size 30`; or try `model_type`
   variants) once there's a full real scene to test against, not blocking
   the rest of phase 3's step-by-step porting.
+
+## Overview
+
+`apps/pipeline` is now a real Bun/TypeScript CLI package with six working
+pipeline steps — `init`, `matte`, `background-plate`, `artwork` (shared
+between the artwork and background panels), `depth`, and `upscale` — plus
+the shared infrastructure (`replicate.ts`, `job.ts`, `models.ts`) they run
+on. Every step was smoke-tested against real footage from the external
+drive's `main.mov`, both individually and chained end to end through a
+minimal `cli.ts`, with real Replicate spend. `outline` and `dream` remain
+out of scope (their own follow-up phase, per the parent plan).
+
+## Architecture
+
+`src/replicate.ts` wraps the official `replicate` npm client with two
+project-specific concerns: pinned model versions (see below) and
+`readFileAsInput()`, which uploads local files as a properly-named `File`
+rather than a raw `Buffer` — several models validate the uploaded
+filename's extension server-side and reject the generic `buffer_<timestamp>`
+name the client gives a bare `Buffer`. `src/job.ts` centralizes the
+working-directory layout (`<job>/video/`, `<job>/frames/<name>/`), the
+skip-if-exists idempotency check every legacy script had inline, and the
+recurring compile-frames-to-video ffmpeg pattern. `src/models.ts` is the
+single source of truth for pinned model versions.
+
+**Deviations from the spec, both discovered by smoke-testing rather than
+assumed up front:**
+
+1. **Every model needs an explicitly pinned version.** The spec listed
+   current version ids as "informational," expecting the `"owner/name"`
+   latest-version shorthand to work day to day. It doesn't — confirmed
+   404ing for all five models this phase uses, both via `replicate.run()`
+   and the raw REST endpoint it calls. `models.ts` is not optional
+   convenience; it's load-bearing.
+2. **`background-plate` doesn't use ProPainter.** The spec's pick
+   (`jd7h/propainter`, chosen for temporal consistency over frame-by-frame
+   LaMa) fails its own mask-extension validation against every
+   Replicate-hosted file URL — reproduced via raw API calls with clean,
+   freshly-uploaded URLs, so it's a bug in that Cog model, not our upload.
+   Shipped the spec's own anticipated fallback instead: per-frame
+   `allenhooo/lama`, driven by the matte's alpha frames through `job.ts`'s
+   `forEachFrame`. Mechanically correct; real flicker-across-frames risk
+   from going per-frame instead of per-video is untested at full-clip
+   length, tracked for phase 5.
+3. **`depth.ts`'s pixel manipulation uses `sharp`, not a straight port of
+   the Python.** The legacy pre/post-processing (transparent-background
+   compositing via an alpha mask, then a specific gamma-correction +
+   narrow-intensity-rescale) used PIL and `skimage`, which have no direct
+   TS equivalent — reimplemented as raw-buffer math and a 256-entry lookup
+   table (`gammaAndRescale` in `depth.ts`). Confirmed matching visually
+   (correct high-contrast depth mask) but not verified byte-for-byte
+   against the original Python's output.
+
+Not a deviation, but worth flagging for phase 4/5: DiffusionCLIP's native
+output is 512×512, and Real-ESRGAN's default `upscale: 4` takes that to
+2048×2048 — well past the legacy pipeline's 1024-wide compiled reference
+videos. Confirmed good visual quality; final sizing is `compose.ts`'s
+problem in phase 4, not something resolved here.

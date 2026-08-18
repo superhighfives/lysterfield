@@ -379,7 +379,7 @@ parent plan, not a substitute for per-phase specs.
 - [x] Phase 0: recover actual script run order + confirm halftone.py's role from the full project source (external drive)
 - [x] Phase 1: scaffold `lysterfield` repo (workspaces, move client, control-room workflow + CLAUDE.md)
 - [x] Phase 2: model audit — ArtLine hosting decision, prototype Kling 3.0 Omni / Grok Imagine as a Deforum replacement for dreaming
-- [ ] Phase 3: port `init`, `matte`, `background-plate` (derive via inpainting instead of requiring a second video), `depth`, `artwork`, `background`, `upscale` steps
+- [x] Phase 3: port `init`, `matte`, `background-plate` (derive via inpainting instead of requiring a second video), `depth`, `artwork`, `background`, `upscale` steps
 - [ ] Phase 3: port `outline`, `dream` steps (post model audit)
 - [ ] Phase 4: port `compose.ts` (fixed 7-panel order) + client manifest writing, dropping `dreams.py`'s lyric-baked-in lane
 - [ ] Phase 5: end-to-end run + parity check against an existing published scene
@@ -418,6 +418,20 @@ like `three-stdlib` (spurious `import/no-unresolved`) — unrelated to the
 version-drift issue above, a separate bug from bun's own module layout.
 `npm run <script> --workspace=apps/<name>` becomes `bun run --cwd
 apps/<name> <script>`; CI workflow updated to `runtime: bun`.
+
+## Phase 3 notes (done 2026-08-18)
+
+Full detail in [`plans/done/phase-3-port-frame-steps.md`](../done/phase-3-port-frame-steps.md).
+`apps/pipeline` now has six working, real-footage-tested steps (`init`,
+`matte`, `background-plate`, `artwork` — shared between the artwork and
+background panels — `depth`, `upscale`) plus a minimal `cli.ts` to run them
+individually. Two things worth knowing without reading the full spec:
+every Replicate model call must use a pinned `owner/name:version` —
+the latest-version shorthand 404s for all of them — and `background-plate`
+runs on per-frame `allenhooo/lama` instead of the originally-planned
+`jd7h/propainter` (that model's Cog wrapper has a real bug rejecting every
+Replicate-hosted file URL as its mask input). `outline`/`dream` remain for
+a follow-up phase, same as before.
 
 ## Open questions
 
