@@ -18,6 +18,13 @@ const existingDreamsData = fs.readFileSync('src/dreams.json', {
 
 const existingDreams = JSON.parse(existingDreamsData)
 
+if (dreams.length === 0 && existingDreams.length > 0) {
+  console.warn(
+    'dreams/ has no scene folders locally — leaving src/dreams.json untouched instead of wiping it. Sync dreams/ first if you want to regenerate.'
+  )
+  process.exit(0)
+}
+
 const dreamsOutput = dreams
   .filter((dream) => dream != 'archive')
   .map((dream) => {
