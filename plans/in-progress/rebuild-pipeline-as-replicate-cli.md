@@ -396,20 +396,28 @@ apps/client` still shows the original commits. `lysterfield-lake` and
 `lysterfield-lake-pipeline` were left untouched on disk, per plan (Phase 6
 retires them later).
 
-One gotcha worth remembering for later phases: a fresh `npm install` (no
-lockfile) re-resolves every caret-ranged dependency against today's registry,
-and ~2 years of drift broke `npm run lint` (`eslint-plugin-import`/
+One gotcha worth remembering for later phases: a fresh install with no
+lockfile re-resolves every caret-ranged dependency against today's registry,
+and ~2 years of drift broke lint two different ways (`eslint-plugin-import`/
 `eslint-import-resolver-typescript` changed how they resolve
-`@uidotdev/usehooks`'s ESM `exports` field). Fixed by seeding the workspace
-root's `package-lock.json` from the original `apps/client/package-lock.json`
-instead of letting npm re-resolve — same fix would apply again if
-`apps/pipeline`'s lockfile is ever regenerated from scratch. Also: the
-client's `postinstall` script (`npm run generate`) overwrites
-`src/dreams.json` from whatever's in `dreams/` — since that folder's contents
-are gitignored and empty in a fresh checkout, `npm install` alone will wipe
-real scene data from `dreams.json` unless the `dreams/` folder is populated
-first. Worth fixing properly before Phase 4 (client manifest writing) rather
-than continuing to manually revert it.
+`@uidotdev/usehooks`'s ESM `exports` field; a newer `eslint` broke
+`eslint-plugin-import`'s `import/namespace` rule outright). Fixed by letting
+`bun install` migrate the original `apps/client/package-lock.json` into
+`bun.lock` instead of resolving fresh — same fix would apply again if
+`apps/pipeline`'s lockfile is ever regenerated from scratch. Also fixed: the
+client's `postinstall` script (`generate`) used to overwrite `src/dreams.json`
+from whatever's in `dreams/` — since that folder's contents are gitignored
+and empty in a fresh checkout, install alone would wipe real scene data. Now
+guarded in `generate-dreams.js`: skips the write and warns instead.
+
+**Switched package manager to bun** (2026-08-17, at your request). Workspace
+root and `apps/client` both install via `bun install`; `bunfig.toml` pins the
+`hoisted` linker because bun's default `isolated` linker's node_modules
+layout broke `eslint-import-resolver-typescript`'s resolution of packages
+like `three-stdlib` (spurious `import/no-unresolved`) — unrelated to the
+version-drift issue above, a separate bug from bun's own module layout.
+`npm run <script> --workspace=apps/<name>` becomes `bun run --cwd
+apps/<name> <script>`; CI workflow updated to `runtime: bun`.
 
 ## Open questions
 
