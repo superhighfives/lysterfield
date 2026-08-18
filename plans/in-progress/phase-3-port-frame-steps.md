@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: scaffold apps/pipeline and port init/matte/background-plate/depth/artwork/background/upscale"
-status: Ready
+status: In Progress
 created: 2026-08-18
 updated: 2026-08-18
 ---
