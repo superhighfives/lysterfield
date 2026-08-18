@@ -15,5 +15,12 @@ export const MODELS = {
   realEsrgan: 'cjwbw/real-esrgan:d0ee3d708c9b911f122a4ad90046c5d26a0293b99476d697f6bb7f2e251ce2d4',
   robustVideoMatting:
     'arielreplicate/robust_video_matting:73d2128a371922d5d1abf0712a1d974be0e4e2358cc1218e4e34714767232bac',
-  propainter: 'jd7h/propainter:e5ea7ae04e97c96a0e14c70d8e4cb899abdf326a377c01f1c10966ccd6c6bae4',
+  /**
+   * Per-frame image inpainting for the background-plate step. Originally
+   * tried `jd7h/propainter` (temporally-consistent video inpainting) — its
+   * Cog wrapper's mask-extension validation fails against every
+   * Replicate-hosted file URL, reproduced via raw API calls with clean
+   * URLs, so it's a bug in that model, not fixable from our side.
+   */
+  lama: 'allenhooo/lama:cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72',
 } as const satisfies Record<string, `${string}/${string}:${string}`>

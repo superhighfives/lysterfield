@@ -1,4 +1,5 @@
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import Replicate from 'replicate'
 
 let client: Replicate | undefined
@@ -29,13 +30,12 @@ export async function runModel<Output = unknown>(
   return output as Output
 }
 
-/** Every model this pipeline calls returns either a FileOutput or an array of them. */
+/** Every model this pipeline calls returns a single FileOutput. */
 type FileOutputLike = { blob: () => Promise<Blob> }
 
 /**
  * Runs a model that returns a single file output (image or video) and
- * writes it to `outputPath`. Covers every step except background-plate,
- * which uses `runModelToFiles` for ProPainter's array output.
+ * writes it to `outputPath`.
  */
 export async function runModelToFile(
   identifier: `${string}/${string}` | `${string}/${string}:${string}`,
@@ -46,22 +46,20 @@ export async function runModelToFile(
   await saveFileOutput(output, outputPath)
 }
 
-/** For models (like ProPainter) whose output is an array of files. */
-export async function runModelToFiles(
-  identifier: `${string}/${string}` | `${string}/${string}:${string}`,
-  input: Record<string, unknown>,
-  outputPaths: string[]
-): Promise<void> {
-  const outputs = await runModel<FileOutputLike[]>(identifier, input)
-  if (outputs.length !== outputPaths.length) {
-    throw new Error(
-      `Expected ${outputPaths.length} output file(s) from ${identifier}, got ${outputs.length}`
-    )
-  }
-  await Promise.all(outputs.map((output, i) => saveFileOutput(output, outputPaths[i])))
-}
-
 async function saveFileOutput(output: FileOutputLike, outputPath: string): Promise<void> {
   const blob = await output.blob()
   await writeFile(outputPath, Buffer.from(await blob.arrayBuffer()))
+}
+
+/**
+ * Reads a local file for use as a model input, preserving its filename and
+ * extension. A raw Buffer uploads as `buffer_<timestamp>` with no
+ * extension and `application/octet-stream` — several models (ProPainter's
+ * `mask` field, confirmed) validate the uploaded filename's extension
+ * server-side and reject that. Always read local files through this, not
+ * `readFile` directly, when passing them as Replicate input.
+ */
+export async function readFileAsInput(filePath: string): Promise<File> {
+  const buffer = await readFile(filePath)
+  return new File([new Uint8Array(buffer)], path.basename(filePath))
 }

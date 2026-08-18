@@ -1,7 +1,6 @@
-import { readFile } from 'node:fs/promises'
 import { exists, extractFrames, framesDir, hasFiles, videoPath, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
-import { runModelToFile } from '../replicate.ts'
+import { readFileAsInput, runModelToFile } from '../replicate.ts'
 
 export interface MatteResult {
   /** The alpha-mask video downloaded from Replicate. */
@@ -21,7 +20,7 @@ export async function matte(job: Job, croppedVideoPath: string): Promise<MatteRe
     await runModelToFile(
       MODELS.robustVideoMatting,
       {
-        input_video: await readFile(croppedVideoPath),
+        input_video: await readFileAsInput(croppedVideoPath),
         output_type: 'alpha-mask',
       },
       alphaVideoPath

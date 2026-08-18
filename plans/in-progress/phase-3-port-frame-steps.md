@@ -243,10 +243,18 @@ name against a small local input and inspect the output — not a full
   `4`). Worth a quick visual check against an old upscaled frame from the
   external drive before locking in `4` — flag during implementation, not
   blocking the start of this phase.
-- **`background-plate` cost/quality at scale**: ProPainter is a genuine
-  design decision (chosen over frame-by-frame LaMa for temporal
-  consistency), but hasn't been prototyped yet the way the phase 2 model
-  audit prototyped the dreaming models. Worth a real test against actual
-  footage early in this phase rather than assuming it works — if it
-  doesn't hold up, frame-by-frame `allenhooo/lama` driven by the same
-  matte is the fallback, at the cost of possible flicker.
+- **Resolved — `background-plate` model**: ProPainter doesn't work at all —
+  its Cog wrapper's mask-extension validation fails against every
+  Replicate-hosted file URL, reproduced via raw API calls with clean,
+  freshly-uploaded URLs (a bug in that model, not our upload). Switched to
+  the anticipated fallback, per-frame `allenhooo/lama`. Mechanically
+  correct (confirmed: cleanly erases whatever region the mask marks), but
+  smoke-testing surfaced a separate, real content-quality issue worth
+  tracking into phase 5's parity check rather than solving now: Robust
+  Video Matting's alpha output for the test clip (a person standing mostly
+  still, gesturing with one arm) only tracked the moving arm, not the full
+  body — so `background-plate` only erased the arm, not the person. Worth
+  revisiting matte quality (dilate the mask before inpainting, matching the
+  legacy SAM step's own `--dilate-kernel-size 30`; or try `model_type`
+  variants) once there's a full real scene to test against, not blocking
+  the rest of phase 3's step-by-step porting.
