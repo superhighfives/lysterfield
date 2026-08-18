@@ -1,6 +1,6 @@
 ---
 title: "Phase 3b: port outline and dream steps"
-status: Ready
+status: In Progress
 created: 2026-08-18
 updated: 2026-08-18
 ---
