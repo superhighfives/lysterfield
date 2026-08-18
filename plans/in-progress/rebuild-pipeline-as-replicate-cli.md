@@ -377,13 +377,39 @@ parent plan, not a substitute for per-phase specs.
 ## Tasks
 
 - [x] Phase 0: recover actual script run order + confirm halftone.py's role from the full project source (external drive)
-- [ ] Phase 1: scaffold `lysterfield` repo (workspaces, move client, control-room workflow + CLAUDE.md)
+- [x] Phase 1: scaffold `lysterfield` repo (workspaces, move client, control-room workflow + CLAUDE.md)
 - [ ] Phase 2: model audit — ArtLine hosting decision, prototype Kling 3.0 Omni / Grok Imagine as a Deforum replacement for dreaming
 - [ ] Phase 3: port `init`, `matte`, `background-plate` (derive via inpainting instead of requiring a second video), `depth`, `artwork`, `background`, `upscale` steps
 - [ ] Phase 3: port `outline`, `dream` steps (post model audit)
 - [ ] Phase 4: port `compose.ts` (fixed 7-panel order) + client manifest writing, dropping `dreams.py`'s lyric-baked-in lane
 - [ ] Phase 5: end-to-end run + parity check against an existing published scene
 - [ ] Phase 6: archive `lysterfield-lake-pipeline`
+
+## Phase 1 notes (done 2026-08-17)
+
+`lysterfield` is now a local-only git repo (no GitHub remote created yet —
+push when ready) at `/Users/superhighfives/Development/lysterfield-lake/lysterfield`.
+`apps/client` carries `lysterfield-lake`'s full 23-commit history, rewritten
+under that subdirectory with `git-filter-repo --to-subdirectory-filter
+apps/client` and merged in with `--allow-unrelated-histories` — `git log
+apps/client` still shows the original commits. `lysterfield-lake` and
+`lysterfield-lake-pipeline` were left untouched on disk, per plan (Phase 6
+retires them later).
+
+One gotcha worth remembering for later phases: a fresh `npm install` (no
+lockfile) re-resolves every caret-ranged dependency against today's registry,
+and ~2 years of drift broke `npm run lint` (`eslint-plugin-import`/
+`eslint-import-resolver-typescript` changed how they resolve
+`@uidotdev/usehooks`'s ESM `exports` field). Fixed by seeding the workspace
+root's `package-lock.json` from the original `apps/client/package-lock.json`
+instead of letting npm re-resolve — same fix would apply again if
+`apps/pipeline`'s lockfile is ever regenerated from scratch. Also: the
+client's `postinstall` script (`npm run generate`) overwrites
+`src/dreams.json` from whatever's in `dreams/` — since that folder's contents
+are gitignored and empty in a fresh checkout, `npm install` alone will wipe
+real scene data from `dreams.json` unless the `dreams/` folder is populated
+first. Worth fixing properly before Phase 4 (client manifest writing) rather
+than continuing to manually revert it.
 
 ## Open questions
 
