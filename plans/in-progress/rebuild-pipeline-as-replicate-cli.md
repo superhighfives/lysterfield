@@ -378,7 +378,7 @@ parent plan, not a substitute for per-phase specs.
 
 - [x] Phase 0: recover actual script run order + confirm halftone.py's role from the full project source (external drive)
 - [x] Phase 1: scaffold `lysterfield` repo (workspaces, move client, control-room workflow + CLAUDE.md)
-- [ ] Phase 2: model audit — ArtLine hosting decision, prototype Kling 3.0 Omni / Grok Imagine as a Deforum replacement for dreaming
+- [x] Phase 2: model audit — ArtLine hosting decision, prototype Kling 3.0 Omni / Grok Imagine as a Deforum replacement for dreaming
 - [ ] Phase 3: port `init`, `matte`, `background-plate` (derive via inpainting instead of requiring a second video), `depth`, `artwork`, `background`, `upscale` steps
 - [ ] Phase 3: port `outline`, `dream` steps (post model audit)
 - [ ] Phase 4: port `compose.ts` (fixed 7-panel order) + client manifest writing, dropping `dreams.py`'s lyric-baked-in lane
