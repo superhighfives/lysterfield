@@ -2,7 +2,7 @@
 title: "Phase 3b: port outline and dream steps"
 status: In Progress
 created: 2026-08-18
-updated: 2026-08-18
+updated: 2026-08-19
 ---
 
 # Phase 3b: port outline and dream steps
@@ -109,22 +109,86 @@ muxed separately in `compose.ts`).
 
 ## Tasks
 
-- [ ] Confirm Replicate login + target model slug with the user
-- [ ] Flip `models/outline/cog.yaml` to `gpu: true` and `cog push`
-- [ ] Pin the outline model version in `models.ts`
-- [ ] `outline.ts` — matte-cutout + depth soft-light blend + brightness
+- [x] Confirm Replicate login + target model slug with the user — user ran
+      `cog login` as `superhighfives`
+- [x] Flip `models/outline/cog.yaml` to `gpu: true` and `cog push`
+- [x] Pin the outline model version in `models.ts`
+- [x] `outline.ts` — matte-cutout + depth soft-light blend + brightness
       preprocessing, model call, resize postprocessing
-- [ ] Add `outline` case to `cli.ts`
-- [ ] Smoke-test `outline.ts` against real frames
-- [ ] Add `MODELS.dream` (`kwaivgi/kling-v3-omni-video`, pinned)
-- [ ] `dream.ts` — source frame + prompt + style-ref → Kling call → download
-- [ ] Add `dream` case to `cli.ts`
-- [ ] Smoke-test `dream.ts` against the phase-2-validated scene/prompt
-- [ ] Tick the second "Phase 3" box in the parent plan's task list
+- [x] Add `outline` case to `cli.ts`
+- [ ] **Blocked** — Smoke-test `outline.ts` against real frames: the pushed
+      model hangs indefinitely in `starting` on Replicate's GPU
+      infrastructure, on both T4 and L40S hardware tiers, never reaching
+      our own `setup()` logs. See Architecture for what's ruled out.
+- [x] Add `MODELS.dream` (`kwaivgi/kling-v3-omni-video`, pinned)
+- [x] `dream.ts` — source frame + prompt + style-ref → Kling call → download
+- [x] Add `dream` case to `cli.ts`
+- [x] Smoke-test `dream.ts` against the phase-2-validated scene/prompt —
+      matches phase 2's result (person fully dissolves into a watercolor
+      landscape by the end of the clip)
+- [ ] Tick the second "Phase 3" box in the parent plan's task list — held
+      until `outline.ts` is actually verified against a live endpoint, not
+      done here since the phase's own goal isn't fully met yet
 
 ## Open questions
 
-- **Replicate push target**: needs the user's Replicate username (or
-  confirmation to use the org account this token already resolves to,
-  which would make the model non-private) and a `cog login`. Blocking for
-  the outline half only — dream doesn't need this, Kling is already public.
+- **Outline model boot hang** (2026-08-18/19): needs a fresh look, ideally
+  in a session where the boot issue can be reproduced with more visibility
+  (Replicate support ticket, or wait and retry — may be transient platform
+  capacity). Not spending more time on it this session per the user's call.
+
+## Overview (partial — outline still blocked)
+
+`dream.ts` is fully shipped and verified: one `kwaivgi/kling-v3-omni-video`
+call per scene, taking a source frame + prompt + style-reference image,
+downloading the resulting video. Confirmed working end to end via the CLI
+against the same scene/prompt/style-ref phase 2 already validated.
+
+`outline.ts` is fully written and wired (matte-cutout onto white, soft-light
+blend with the matching depth frame, brightness enhancement, then the model
+call) and the packaged Cog model from `models/outline/` is pushed live to
+`superhighfives/lysterfield-outline` on Replicate — but every prediction
+against it hangs indefinitely in `starting`, on two different hardware
+tiers, without ever reaching our own `setup()` logs. This isn't left in
+`plans/done/` because the phase's stated goal — port outline *and* dream —
+isn't actually met; leaving it in-progress here rather than closing it out
+prematurely.
+
+## Architecture
+
+Four `cog push` attempts before landing a build that at least *pushes*
+cleanly:
+
+1. `gpu: true`, cog 0.21.0, default CUDA base image — pip install fails
+   with `externally-managed-environment` (a real, currently-open upstream
+   bug: `uv`-managed Python + CUDA base image + PEP 668, see
+   `replicate/cog#2994`).
+2. Upgraded to cog 0.22.0 (brew's `cog` formula shadowed the pre-existing
+   `/opt/homebrew/bin/cog` binary — invoked the Cellar path directly rather
+   than fight the user's `PATH`/symlinks) — pip install succeeds, but the
+   container fails at `cog`'s own post-push verification step:
+   `[FATAL tini] exec python failed: No such file or directory` (the CUDA
+   base image only provides `python3`, not `python`).
+3. `--use-cuda-base-image=false` to sidestep both — builds and pushes
+   cleanly, but Replicate auto-disabled the resulting version:
+   `"Version disabled ... consistently fails to complete setup"` — almost
+   certainly because a `gpu: true` model needs actual CUDA in the image,
+   which this flag removes entirely.
+4. Reverted to the default CUDA base image, added an explicit
+   `run: ln -sf $(which python3) /usr/bin/python` to `cog.yaml` to fix
+   attempt 2's real problem without attempt 3's regression. This build
+   pushes cleanly *and* passes cog's own local post-push verification
+   (which actually boots the image) — but predictions against it still
+   hang in `starting` forever on Replicate's actual GPU workers, confirmed
+   on both T4 and L40S hardware tiers.
+
+That last hang is unexplained. What it's *not*: a missing-hardware-tier
+issue (checked, both tiers configured), the `externally-managed-environment`
+bug (fixed, build 4 gets past pip install), or the missing-`python`-symlink
+bug (fixed, and confirmed fixed by `cog push`'s own local boot-and-verify
+step succeeding). The gap between "boots fine locally when cog verifies it"
+and "never boots on Replicate's GPU fleet" points at something in Replicate's
+scheduler/infra rather than the image itself, but that's a hypothesis, not
+a confirmed root cause. Whoever picks this back up should start from
+`models/outline/cog.yaml`'s current state (attempt 4) — don't re-litigate
+attempts 1-3.
