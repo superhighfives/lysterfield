@@ -143,8 +143,14 @@ muxed separately in `compose.ts`).
   confirmed fine. The 615s timeout is happening somewhere in Replicate's own
   GPU worker provisioning/boot path (image pull time, CUDA driver init on
   their actual hardware, scheduling) — outside what's diagnosable or fixable
-  from this repo. Next step is Replicate support, or retrying later in case
-  it's transient platform capacity, not more build changes.
+  from this repo.
+- **Redeploy didn't clear it** (2026-08-19): pushed again (same `cog.yaml`,
+  fresh digest `57ee741c...`) on the chance it was transient — a new
+  prediction against the new version sat in `starting` for 12+ minutes
+  (past the 615s mark the earlier failure reported) before being manually
+  cancelled; Replicate's own auto-timeout never fired within that window
+  either. Ruling out "just retry" as a fix. Next step is genuinely
+  Replicate support — this repo's side of the problem is done and verified.
 
 ## Overview (partial — outline still blocked on Replicate, not on us)
 
