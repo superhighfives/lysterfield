@@ -132,12 +132,21 @@ muxed separately in `compose.ts`).
 
 ## Open questions
 
-- **Outline model boot hang** (2026-08-18/19): needs a fresh look, ideally
-  in a session where the boot issue can be reproduced with more visibility
-  (Replicate support ticket, or wait and retry — may be transient platform
-  capacity). Not spending more time on it this session per the user's call.
+- **Resolved — the model itself isn't the problem** (2026-08-19): the exact
+  error Replicate gives is `model container failed to boot and complete
+  setup within 615 seconds`, not an infinite hang. Ran the actual pushed
+  image locally (`docker run -p 5001:5000 r8.im/superhighfives/
+  lysterfield-outline:latest`, plus a real prediction against it) — `setup()`
+  completes in ~2.5 seconds and the prediction succeeds, correct line-art
+  output, even under QEMU amd64-on-arm64 emulation on a laptop. So the
+  image, the `python` symlink fix, the checkpoint, and `predict.py` are all
+  confirmed fine. The 615s timeout is happening somewhere in Replicate's own
+  GPU worker provisioning/boot path (image pull time, CUDA driver init on
+  their actual hardware, scheduling) — outside what's diagnosable or fixable
+  from this repo. Next step is Replicate support, or retrying later in case
+  it's transient platform capacity, not more build changes.
 
-## Overview (partial — outline still blocked)
+## Overview (partial — outline still blocked on Replicate, not on us)
 
 `dream.ts` is fully shipped and verified: one `kwaivgi/kling-v3-omni-video`
 call per scene, taking a source frame + prompt + style-reference image,
@@ -146,13 +155,16 @@ against the same scene/prompt/style-ref phase 2 already validated.
 
 `outline.ts` is fully written and wired (matte-cutout onto white, soft-light
 blend with the matching depth frame, brightness enhancement, then the model
-call) and the packaged Cog model from `models/outline/` is pushed live to
-`superhighfives/lysterfield-outline` on Replicate — but every prediction
-against it hangs indefinitely in `starting`, on two different hardware
-tiers, without ever reaching our own `setup()` logs. This isn't left in
-`plans/done/` because the phase's stated goal — port outline *and* dream —
-isn't actually met; leaving it in-progress here rather than closing it out
-prematurely.
+call), and the packaged Cog model from `models/outline/` is confirmed
+correct — proven by running the exact pushed image locally end to end (see
+Open Questions). It's pushed live to `superhighfives/lysterfield-outline`
+on Replicate, but every prediction against the *hosted* endpoint times out
+during boot (`"failed to boot and complete setup within 615 seconds"`) on
+both T4 and L40S hardware tiers. This isn't left in `plans/done/` because
+the phase's stated goal — both steps working end to end against live
+Replicate endpoints — isn't actually met; leaving it in-progress rather
+than closing it out prematurely. Whoever picks this up next doesn't need
+to re-diagnose the image itself — that part's done and correct.
 
 ## Architecture
 
