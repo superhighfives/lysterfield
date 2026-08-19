@@ -5,8 +5,10 @@ import { loadJob, type Job } from './job.ts'
 import { artwork } from './steps/artwork.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
 import { depth } from './steps/depth.ts'
+import { dream } from './steps/dream.ts'
 import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
+import { outline } from './steps/outline.ts'
 import { upscale } from './steps/upscale.ts'
 
 /**
@@ -104,9 +106,33 @@ switch (step) {
     break
   }
 
+  case 'outline': {
+    const job = await loadJob(requireFlag('job'))
+    const result = await outline(
+      job,
+      frameDirFlag(job, 'source', 'source'),
+      frameDirFlag(job, 'alpha', 'alpha'),
+      frameDirFlag(job, 'depth', 'depth'),
+      concurrency
+    )
+    console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
+  case 'dream': {
+    const job = await loadJob(requireFlag('job'))
+    const result = await dream(job, {
+      prompt: requireFlag('prompt'),
+      styleRefPath: requireFlag('style-ref'),
+      framePath: flags.frame,
+    })
+    console.log(JSON.stringify(result, null, 2))
+    break
+  }
+
   default:
     console.error(
-      `Usage: bun run src/cli.ts <init|matte|background-plate|artwork|depth|upscale> --job <dir> [options]`
+      `Usage: bun run src/cli.ts <init|matte|background-plate|artwork|depth|upscale|outline|dream> --job <dir> [options]`
     )
     process.exit(1)
 }

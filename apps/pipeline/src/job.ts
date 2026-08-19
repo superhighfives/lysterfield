@@ -68,6 +68,13 @@ export async function forEachFrame(
   await Promise.all(Array.from({ length: concurrency }, worker))
 }
 
+/** Path to the first (lowest-numbered) frame in a frame directory. */
+export async function firstFrame(dir: string): Promise<string> {
+  const frames = (await readdir(dir)).filter((f) => f.endsWith('.png')).sort()
+  if (frames.length === 0) throw new Error(`No frames found in ${dir}`)
+  return path.join(dir, frames[0])
+}
+
 export async function exists(p: string): Promise<boolean> {
   try {
     await stat(p)

@@ -23,4 +23,10 @@ export const MODELS = {
    * URLs, so it's a bug in that model, not fixable from our side.
    */
   lama: 'allenhooo/lama:cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72',
+  /** Dreaming step — see phase 2's prototyping for why this was picked over Grok Imagine. */
+  dream:
+    'kwaivgi/kling-v3-omni-video:460d4f46adf3c29abbcd8f42cf5434570da6b50a39ec4593f2006486b1dd3fba',
+  /** Outline step — the packaged ArtLine model from `models/outline/` (phase 2), no public port exists. */
+  outline:
+    'superhighfives/lysterfield-outline:b8287e57fe2028a7b5e39c38d294d653cf392a9a6ce468742e0e3fc3b4725d69',
 } as const satisfies Record<string, `${string}/${string}:${string}`>
