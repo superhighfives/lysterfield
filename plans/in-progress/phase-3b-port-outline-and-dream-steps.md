@@ -2,7 +2,7 @@
 title: "Phase 3b: port outline and dream steps"
 status: In Progress
 created: 2026-08-18
-updated: 2026-08-19
+updated: 2026-08-25
 ---
 
 # Phase 3b: port outline and dream steps
@@ -151,6 +151,14 @@ muxed separately in `compose.ts`).
   cancelled; Replicate's own auto-timeout never fired within that window
   either. Ruling out "just retry" as a fix. Next step is genuinely
   Replicate support — this repo's side of the problem is done and verified.
+- **Still stuck a week later** (2026-08-25): retried at the user's request
+  after a week's gap, on the chance it was a transient platform issue that
+  would have cleared. Pushed a completely fresh version (digest
+  `500b3259...`) and ran a new prediction — same symptom, stuck in
+  `starting` for 15+ minutes with zero logs, manually cancelled. Time alone
+  doesn't fix this; not retrying again without new information (a
+  Replicate support response, a cog release note, or a different
+  base-image/hardware combination to try).
 
 ## Overview (partial — outline still blocked on Replicate, not on us)
 
