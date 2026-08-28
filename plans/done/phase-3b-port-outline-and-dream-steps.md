@@ -1,8 +1,8 @@
 ---
 title: "Phase 3b: port outline and dream steps"
-status: In Progress
+status: Complete
 created: 2026-08-18
-updated: 2026-08-25
+updated: 2026-08-27
 ---
 
 # Phase 3b: port outline and dream steps
@@ -116,19 +116,16 @@ muxed separately in `compose.ts`).
 - [x] `outline.ts` — matte-cutout + depth soft-light blend + brightness
       preprocessing, model call, resize postprocessing
 - [x] Add `outline` case to `cli.ts`
-- [ ] **Blocked** — Smoke-test `outline.ts` against real frames: the pushed
-      model hangs indefinitely in `starting` on Replicate's GPU
-      infrastructure, on both T4 and L40S hardware tiers, never reaching
-      our own `setup()` logs. See Architecture for what's ruled out.
+- [x] Smoke-test `outline.ts` against real frames — resolved by switching
+      `models/outline/cog.yaml` from `gpu: true` to `gpu: false`; see
+      Architecture for the diagnosis and why CPU fixed it
 - [x] Add `MODELS.dream` (`kwaivgi/kling-v3-omni-video`, pinned)
 - [x] `dream.ts` — source frame + prompt + style-ref → Kling call → download
 - [x] Add `dream` case to `cli.ts`
 - [x] Smoke-test `dream.ts` against the phase-2-validated scene/prompt —
       matches phase 2's result (person fully dissolves into a watercolor
       landscape by the end of the clip)
-- [ ] Tick the second "Phase 3" box in the parent plan's task list — held
-      until `outline.ts` is actually verified against a live endpoint, not
-      done here since the phase's own goal isn't fully met yet
+- [x] Tick the second "Phase 3" box in the parent plan's task list
 
 ## Open questions
 
@@ -156,29 +153,39 @@ muxed separately in `compose.ts`).
   would have cleared. Pushed a completely fresh version (digest
   `500b3259...`) and ran a new prediction — same symptom, stuck in
   `starting` for 15+ minutes with zero logs, manually cancelled. Time alone
-  doesn't fix this; not retrying again without new information (a
-  Replicate support response, a cog release note, or a different
-  base-image/hardware combination to try).
+  doesn't fix this.
+- **Resolved — dropped GPU, boots and predicts correctly** (2026-08-27):
+  the image was 6.97GB, almost entirely CUDA/GPU-torch (a 2.81GB CUDA/cuDNN
+  base layer + a 4.07GB GPU-torch install layer) for a model that's a
+  300×300 U-Net — never actually compute-heavy enough to need a GPU. Phase
+  2's very first local validation, before any GPU work, ran this same
+  checkpoint on CPU in ~2.5s. Rebuilt with `gpu: false` (kept the harmless
+  `python` symlink line as insurance) — the resulting image builds and
+  pushes in a fraction of the time, and a live prediction against the
+  hosted endpoint succeeded on the first try: 20.6s total (most of that
+  cold-start), 0.77s actual predict time, correct output. Confirmed the
+  full `outline.ts` step (not just the raw model) end to end via the CLI
+  too. GPU was never load-bearing for this model; it was the entire cause
+  of the boot failure.
 
-## Overview (partial — outline still blocked on Replicate, not on us)
+## Overview
 
-`dream.ts` is fully shipped and verified: one `kwaivgi/kling-v3-omni-video`
-call per scene, taking a source frame + prompt + style-reference image,
-downloading the resulting video. Confirmed working end to end via the CLI
-against the same scene/prompt/style-ref phase 2 already validated.
+Both steps are fully shipped and verified end to end against live
+Replicate endpoints.
 
-`outline.ts` is fully written and wired (matte-cutout onto white, soft-light
-blend with the matching depth frame, brightness enhancement, then the model
-call), and the packaged Cog model from `models/outline/` is confirmed
-correct — proven by running the exact pushed image locally end to end (see
-Open Questions). It's pushed live to `superhighfives/lysterfield-outline`
-on Replicate, but every prediction against the *hosted* endpoint times out
-during boot (`"failed to boot and complete setup within 615 seconds"`) on
-both T4 and L40S hardware tiers. This isn't left in `plans/done/` because
-the phase's stated goal — both steps working end to end against live
-Replicate endpoints — isn't actually met; leaving it in-progress rather
-than closing it out prematurely. Whoever picks this up next doesn't need
-to re-diagnose the image itself — that part's done and correct.
+`dream.ts`: one `kwaivgi/kling-v3-omni-video` call per scene, taking a
+source frame + prompt + style-reference image, downloading the resulting
+video. Confirmed working via the CLI against the same scene/prompt/
+style-ref phase 2 already validated.
+
+`outline.ts`: matte-cutout onto white, soft-light blend with the matching
+depth frame, brightness enhancement, then the packaged ArtLine model call.
+The model (`superhighfives/lysterfield-outline` on Replicate) runs on CPU,
+not GPU — the `gpu: true` build was correct code but never booted on
+Replicate's actual GPU infrastructure (see Open Questions for the week-long
+diagnosis); switching to CPU fixed it outright, and CPU predict time
+(~0.8s/frame) is fine for a model this size. Confirmed via both a direct
+model call and the full `outline.ts` step through the CLI.
 
 ## Architecture
 
@@ -208,13 +215,20 @@ cleanly:
    hang in `starting` forever on Replicate's actual GPU workers, confirmed
    on both T4 and L40S hardware tiers.
 
-That last hang is unexplained. What it's *not*: a missing-hardware-tier
-issue (checked, both tiers configured), the `externally-managed-environment`
-bug (fixed, build 4 gets past pip install), or the missing-`python`-symlink
-bug (fixed, and confirmed fixed by `cog push`'s own local boot-and-verify
-step succeeding). The gap between "boots fine locally when cog verifies it"
-and "never boots on Replicate's GPU fleet" points at something in Replicate's
-scheduler/infra rather than the image itself, but that's a hypothesis, not
-a confirmed root cause. Whoever picks this back up should start from
-`models/outline/cog.yaml`'s current state (attempt 4) — don't re-litigate
-attempts 1-3.
+That last hang wasn't a code bug: a missing-hardware-tier issue (checked,
+both tiers configured), the `externally-managed-environment` bug (fixed,
+build 4 gets past pip install), and the missing-`python`-symlink bug
+(fixed, confirmed by `cog push`'s own local boot-and-verify step
+succeeding) were all ruled out. What actually fixed it — attempt 5, a week
+after attempt 4 — was dropping GPU entirely: `docker history` on the
+pushed image showed 6.97GB total, with a 2.81GB CUDA/cuDNN base layer and
+a 4.07GB layer installing GPU-enabled torch accounting for nearly all of
+it, for a model that's a 300×300 U-Net doing sub-second CPU inference.
+Rebuilding with `gpu: false` produces a dramatically smaller image with no
+CUDA base, no CUDA driver initialization, and no GPU-torch wheel — and it
+booted and predicted correctly on the very first live attempt (20.6s cold
+start, 0.77s predict). The exact mechanism on Replicate's side (image pull
+time against a boot budget, GPU worker provisioning/scheduling, CUDA
+driver init cost) is still a hypothesis, not confirmed from their end —
+but the fix works regardless of which of those it actually was, and GPU
+was never load-bearing for a model this small in the first place.

@@ -380,7 +380,7 @@ parent plan, not a substitute for per-phase specs.
 - [x] Phase 1: scaffold `lysterfield` repo (workspaces, move client, control-room workflow + CLAUDE.md)
 - [x] Phase 2: model audit — ArtLine hosting decision, prototype Kling 3.0 Omni / Grok Imagine as a Deforum replacement for dreaming
 - [x] Phase 3: port `init`, `matte`, `background-plate` (derive via inpainting instead of requiring a second video), `depth`, `artwork`, `background`, `upscale` steps
-- [ ] Phase 3: port `outline`, `dream` steps (post model audit)
+- [x] Phase 3: port `outline`, `dream` steps (post model audit)
 - [ ] Phase 4: port `compose.ts` (fixed 7-panel order) + client manifest writing, dropping `dreams.py`'s lyric-baked-in lane
 - [ ] Phase 5: end-to-end run + parity check against an existing published scene
 - [ ] Phase 6: archive `lysterfield-lake-pipeline`
@@ -454,9 +454,14 @@ a follow-up phase, same as before.
   a real production frame. `fastai` is a required runtime dependency purely
   for pickle's class resolution (the checkpoint is `torch.save(learn.model,
   ...)`, a pickled fastai `DynamicUnet`) — nothing in `predict.py` calls
-  fastai's API. Not pushed to Replicate yet — deferred to phase 3 when
-  `outline.ts` needs a live endpoint (flip `gpu: true` in `cog.yaml` first;
-  local validation ran CPU-only).
+  fastai's API. Pushed to Replicate in phase 3 (`superhighfives/
+  lysterfield-outline`) — runs on **CPU**, not GPU: a `gpu: true` build
+  never booted on Replicate's actual GPU infrastructure (stuck in
+  "starting" for 15+ minutes, every hardware tier, across several fresh
+  pushes over a week — see phase 3b's plan for the full diagnosis), while
+  the image was 6.97GB almost entirely from the CUDA/GPU-torch stack for a
+  300×300 model that was never compute-heavy enough to need a GPU.
+  Switching to CPU fixed the boot issue outright and predicts in ~0.8s.
 - **Resolved — dreaming model choice** (2026-08-17/18, phase 2): both
   candidates hold up — the Deforum-fallback path is not needed. Prototyped
   against scene `20230808103741` ("Watercolour"), using its real prompt
