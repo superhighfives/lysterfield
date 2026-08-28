@@ -1,5 +1,16 @@
 build:
-  gpu: true
+  # CPU, not GPU. The GPU build's image was 6.97GB (2.81GB CUDA/cuDNN base +
+  # 4.07GB installing GPU torch) and every prediction against it hung in
+  # "starting" for 15+ minutes on Replicate's real GPU workers across
+  # multiple fresh pushes and hardware tiers (T4, L40S) over a week — while
+  # the exact same image booted and predicted correctly in ~2.5s when run
+  # locally via `docker run`. That gap points at image-pull/GPU-provisioning
+  # time on Replicate's infra, not our code. This model is a 300x300 U-Net —
+  # cheap enough that GPU was never load-bearing; phase 2's very first local
+  # validation (before any of this GPU work) ran it on CPU in ~2.5s too. CPU
+  # sidesteps the whole class of problem: no CUDA base image, no CUDA driver
+  # boot, no cuda-torch wheel, and `cpu` is its own Replicate hardware SKU.
+  gpu: false
   python_version: "3.10"
   python_packages:
     - "setuptools<81"
@@ -10,11 +21,8 @@ build:
     - pillow==9.5.0
     - matplotlib==3.7.1
   run:
-    # cog 0.22's GPU/CUDA base image only provides `python3`; cog's own
-    # tooling (and, per the disabled-version error, Replicate's runtime
-    # setup) invokes `python`. Symlink it — fixes "[FATAL tini] exec python
-    # failed: No such file or directory" without falling back to
-    # --use-cuda-base-image=false, which drops CUDA entirely and is why the
-    # first push's version got auto-disabled (setup() needs a real GPU).
+    # Harmless on the CPU base image even if `python` is already present —
+    # cheap insurance against the same "exec python failed" failure mode
+    # the GPU base image hit.
     - ln -sf $(which python3) /usr/bin/python
 predict: "predict.py:Predictor"

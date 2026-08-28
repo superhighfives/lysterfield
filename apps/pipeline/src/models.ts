@@ -26,7 +26,15 @@ export const MODELS = {
   /** Dreaming step — see phase 2's prototyping for why this was picked over Grok Imagine. */
   dream:
     'kwaivgi/kling-v3-omni-video:460d4f46adf3c29abbcd8f42cf5434570da6b50a39ec4593f2006486b1dd3fba',
-  /** Outline step — the packaged ArtLine model from `models/outline/` (phase 2), no public port exists. */
+  /**
+   * Outline step — the packaged ArtLine model from `models/outline/`
+   * (phase 2), no public port exists. Runs on CPU, not GPU — a `gpu: true`
+   * build of this same checkpoint boots fine locally but reliably failed to
+   * boot on Replicate's actual GPU workers (stuck in "starting", every
+   * hardware tier, across a week and several fresh pushes). See phase 3b's
+   * plan for the full diagnosis; the fix was dropping GPU entirely, not a
+   * code change — CPU predict time is ~0.8s per frame anyway.
+   */
   outline:
-    'superhighfives/lysterfield-outline:b8287e57fe2028a7b5e39c38d294d653cf392a9a6ce468742e0e3fc3b4725d69',
+    'superhighfives/lysterfield-outline:0731a7247a52e0578f5b92ea6e6cbf763bcaa411d1927c40d86582514c9d0bb9',
 } as const satisfies Record<string, `${string}/${string}:${string}`>
