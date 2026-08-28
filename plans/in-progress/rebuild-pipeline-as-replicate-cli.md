@@ -381,7 +381,7 @@ parent plan, not a substitute for per-phase specs.
 - [x] Phase 2: model audit — ArtLine hosting decision, prototype Kling 3.0 Omni / Grok Imagine as a Deforum replacement for dreaming
 - [x] Phase 3: port `init`, `matte`, `background-plate` (derive via inpainting instead of requiring a second video), `depth`, `artwork`, `background`, `upscale` steps
 - [x] Phase 3: port `outline`, `dream` steps (post model audit)
-- [ ] Phase 4: port `compose.ts` (fixed 7-panel order) + client manifest writing, dropping `dreams.py`'s lyric-baked-in lane
+- [x] Phase 4: port `compose.ts` (fixed 7-panel order) + client manifest writing, dropping `dreams.py`'s lyric-baked-in lane
 - [ ] Phase 5: end-to-end run + parity check against an existing published scene
 - [ ] Phase 6: archive `lysterfield-lake-pipeline`
 

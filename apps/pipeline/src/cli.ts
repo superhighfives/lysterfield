@@ -1,6 +1,9 @@
 #!/usr/bin/env bun
 // Bun loads .env from the cwd automatically — no dotenv package needed.
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { writeClientAssets } from './client-manifest.ts'
+import { compose } from './compose.ts'
 import { loadJob, type Job } from './job.ts'
 import { artwork } from './steps/artwork.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
@@ -10,6 +13,8 @@ import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
 import { outline } from './steps/outline.ts'
 import { upscale } from './steps/upscale.ts'
+
+const DEFAULT_CLIENT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'client')
 
 /**
  * Minimal CLI for running one pipeline step at a time against a job
@@ -130,9 +135,30 @@ switch (step) {
     break
   }
 
+  case 'compose': {
+    const job = await loadJob(requireFlag('job'))
+    const id = requireFlag('id')
+    const result = await compose(job, {
+      artworkFramesDir: frameDirFlag(job, 'artwork-upscaled', 'artwork'),
+      backgroundFramesDir: frameDirFlag(job, 'background-upscaled', 'background'),
+      matteFramesDir: frameDirFlag(job, 'alpha', 'matte'),
+      depthFramesDir: frameDirFlag(job, 'depth', 'depth'),
+      outlineFramesDir: frameDirFlag(job, 'outline', 'outline'),
+      dreamVideoPath: flags.dream ?? path.join(job.dir, 'video', 'dream.mp4'),
+    })
+    console.log(JSON.stringify(result, null, 2))
+
+    if (flags['skip-client'] !== 'true') {
+      const clientDir = path.resolve(flags['client-dir'] ?? DEFAULT_CLIENT_DIR)
+      await writeClientAssets(clientDir, id, result)
+      console.log(`Wrote client assets for "${id}" to ${clientDir}`)
+    }
+    break
+  }
+
   default:
     console.error(
-      `Usage: bun run src/cli.ts <init|matte|background-plate|artwork|depth|upscale|outline|dream> --job <dir> [options]`
+      `Usage: bun run src/cli.ts <init|matte|background-plate|artwork|depth|upscale|outline|dream|compose> --job <dir> [options]`
     )
     process.exit(1)
 }
