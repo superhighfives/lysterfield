@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: compose.ts (fixed 7-panel hstack) and client manifest writing"
-status: Ready
+status: In Progress
 created: 2026-08-27
 updated: 2026-08-27
 ---
@@ -201,7 +201,9 @@ One function, `compose(job, dreamVideoPath, opts)`, doing in order:
    already 1024×1024), `artwork`/`background`/`matte`/`depth`/`outline`
    (each already a frame folder from an earlier step — use `job.ts`'s
    `compileFramesToVideo` with `scale: '1024:1024'`), `dream` (square-crop
-   + scale the Kling output, a new small ffmpeg helper — not
+   + scale the Kling output, then `-stream_loop` it to at least the audio's
+   duration — resolved in Open Questions: loop rather than hold/regenerate
+   longer, accepting a visible seam for now. A new small ffmpeg helper, not
    `compileFramesToVideo`, since the input is already a video, not a frame
    folder).
 2. `ffprobe` `resources/audio/lysterfield-lake.wav` for its duration
@@ -290,16 +292,11 @@ scratch copy, or `--skip-client`, and only wire against the real
   `-stream_loop` flag) — if the legacy pipeline never handled this, the
   words asset was presumably always long enough; carry that assumption
   forward rather than adding new handling.
-- **`-t $OUTPUT_AUDIO_LENGTH` vs. `dream.ts`'s fixed 5-second output**:
-  phase 3b's `dream.ts` currently hardcodes `duration: 5` for Kling
-  (a phase-2-validated smoke-test value, explicitly flagged there as "an
-  open call for phase 4/5, not phase 3b"). The real
-  `lysterfield-lake.wav` track is almost certainly much longer than 5
-  seconds (it's the whole song) — meaning today's `dream.ts` output can't
-  actually fill a real composite's duration. This phase should surface
-  that gap explicitly (e.g. loop or hold the last frame to fill the
-  audio's length) rather than silently truncating the whole video to 5
-  seconds, but the *right* fix (a longer Kling call? tiling/crossfading
-  multiple dream clips? one long generation reused across the video?) is
-  a real design decision worth resolving with the user before or during
-  implementation, not assumed here.
+- **Resolved — `-t $OUTPUT_AUDIO_LENGTH` vs. `dream.ts`'s fixed 5-second
+  output** (2026-08-27): the real `lysterfield-lake.wav` track is much
+  longer than `dream.ts`'s 5-second Kling clip. Per the user: loop the 5s
+  clip to fill the audio's full length (`ffmpeg -stream_loop`), accepting
+  a visible seam for now — cheap, no extra Replicate spend, revisit later
+  if the loop reads badly in the real composite. `compose.ts`'s panel-1
+  normalization step (dream: crop+scale to 1024×1024) is where this
+  loop-fill belongs, before the hstack, not as a separate step.
