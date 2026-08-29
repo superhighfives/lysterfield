@@ -63,3 +63,15 @@ export async function readFileAsInput(filePath: string): Promise<File> {
   const buffer = await readFile(filePath)
   return new File([new Uint8Array(buffer)], path.basename(filePath))
 }
+
+/**
+ * Uploads a local file to Replicate once and returns its URL, for inputs
+ * reused across many predictions (e.g. a fixed style-reference image
+ * passed to every per-frame call) — avoids re-uploading the same bytes on
+ * every single frame the way passing a `File` per call would.
+ */
+export async function uploadFileOnce(filePath: string): Promise<string> {
+  const file = await readFileAsInput(filePath)
+  const uploaded = await getClient().files.create(file)
+  return uploaded.urls.get
+}

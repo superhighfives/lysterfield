@@ -2,7 +2,7 @@
 title: "Phase 3: scaffold apps/pipeline and port init/matte/background-plate/depth/artwork/background/upscale"
 status: Complete
 created: 2026-08-18
-updated: 2026-08-18
+updated: 2026-08-28
 ---
 
 # Phase 3: scaffold apps/pipeline and port init/matte/background-plate/depth/artwork/background/upscale
@@ -260,6 +260,29 @@ name against a small local input and inspect the output — not a full
   legacy SAM step's own `--dilate-kernel-size 30`; or try `model_type`
   variants) once there's a full real scene to test against, not blocking
   the rest of phase 3's step-by-step porting.
+- **Resolved — `artwork.ts` no longer uses DiffusionCLIP** (2026-08-28):
+  `gwang-kim/diffusionclip` (a 2022, cog 0.4.1 community model) hit a
+  genuine 3-hour boot hang while smoke-testing phase 4 — the same
+  "abandoned old image, unreliable Replicate infra" failure mode as
+  `outline`'s pre-fix GPU builds (see phase 3b), except this model isn't
+  ours to rebuild. A follow-up isolated test confirmed it does still work,
+  just with an unreliable cold boot (sometimes 7+ minutes). Replaced with
+  Google's official `nano-banana-2`: the same source frame plus a fixed
+  `resources/style/watercolor-reference.png` (a real DiffusionCLIP
+  watercolor output, kept as the canonical style target rather than
+  depending on a model checkpoint) passed via `image_input`, with a prompt
+  asking it to match that reference's technique. Compared side by side
+  against DiffusionCLIP's own output on the same frame — matched the style
+  convincingly, arguably cleaner than DiffusionCLIP's blurry 512×512
+  native output, while being fast (~14s) and reliable. `replicate.ts`
+  gained `uploadFileOnce()` so the fixed style-reference image is uploaded
+  once per `artwork()` call rather than re-uploaded on every frame.
+  Worth revisiting for phase 5's parity check: nano-banana-2's output
+  resolution (roughly matches the ~1024×1024 input, well above
+  DiffusionCLIP's 512×512) means `upscale.ts`'s `upscale: 4` now produces
+  much larger intermediate files than before for no visual benefit, since
+  `compose.ts` downsamples every panel back to 1024×1024 regardless —
+  not incorrect, just wasted work worth tuning later.
 
 ## Overview
 
@@ -312,9 +335,18 @@ assumed up front:**
    table (`gammaAndRescale` in `depth.ts`). Confirmed matching visually
    (correct high-contrast depth mask) but not verified byte-for-byte
    against the original Python's output.
+4. **`artwork.ts` doesn't use DiffusionCLIP** (added 2026-08-28, after
+   phase 4 smoke-testing surfaced a 3-hour boot hang on that model). Now
+   `google/nano-banana-2`, steered to DiffusionCLIP's watercolor look via
+   a fixed reference image (`resources/style/watercolor-reference.png`)
+   passed through `image_input` alongside each frame, rather than a
+   dedicated style-transfer checkpoint. See the Open Questions entry above
+   for the comparison and the upscale-factor follow-up it left open.
 
 Not a deviation, but worth flagging for phase 4/5: DiffusionCLIP's native
 output is 512×512, and Real-ESRGAN's default `upscale: 4` takes that to
 2048×2048 — well past the legacy pipeline's 1024-wide compiled reference
 videos. Confirmed good visual quality; final sizing is `compose.ts`'s
-problem in phase 4, not something resolved here.
+problem in phase 4, not something resolved here. (Superseded by
+deviation 4 above — the artwork panel's native resolution changed again
+with the DiffusionCLIP → nano-banana-2 swap.)
