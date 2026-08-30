@@ -80,7 +80,8 @@ switch (step) {
       job,
       frameDirFlag(job, 'source'),
       requireFlag('output'),
-      concurrency
+      concurrency,
+      flags.seed ? Number(flags.seed) : undefined
     )
     console.log(JSON.stringify(result, null, 2))
     break

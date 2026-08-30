@@ -11,20 +11,22 @@
 export const MODELS = {
   /**
    * Artwork step — replaced `gwang-kim/diffusionclip` (a 2022, cog 0.4.1
-   * community model) after it hit a 3-hour boot hang mid-pipeline; a
-   * follow-up isolated test showed the model does still work, just with an
-   * unreliable, sometimes 7+ minute cold boot — the same "abandoned old
-   * image" failure mode phase 3b hit with `outline`, except this one isn't
-   * ours to rebuild. Google's official `nano-banana-2`, given the same
-   * frame plus `resources/style/watercolor-reference.png` (a real
-   * DiffusionCLIP "ImageNet style transfer - Watercolor art" output, kept
-   * as the canonical style target) via `image_input` and a prompt asking
-   * it to match that reference's watercolor technique, matched the old
-   * style convincingly — arguably cleaner than DiffusionCLIP's own
-   * blurry, low-res (512×512) output — while being fast (~14s) and
-   * reliable. See phase 3's plan for the side-by-side comparison.
+   * community model) after it hit a 3-hour boot hang mid-pipeline; see
+   * phase 3's plan for that diagnosis. First replacement was Google's
+   * `nano-banana-2` (matched the watercolor style convincingly, given the
+   * frame plus a style-reference image via `image_input`) but at
+   * $0.07/call and two calls per frame (artwork + background panels),
+   * cost was the dominant line item — phase 5's real-footage cost check
+   * put a full scene at ~$80+ even at a modest 2fps, ~$1,800+ at the
+   * legacy pipeline's 60fps. Replaced again with `black-forest-labs/
+   * flux-kontext-dev`: an official, open-weights image-editing model that
+   * preserves the source frame's identity/composition while applying the
+   * watercolor look purely from a text prompt — no separate style-
+   * reference image needed, unlike nano-banana-2. See phase 5's plan for
+   * the cost/quality comparison.
    */
-  nanoBanana2: 'google/nano-banana-2:d1be8b5fc0931a253d417e12a484ac01ee9ccbc6daffd4792151377d5e5ff55f',
+  artwork:
+    'black-forest-labs/flux-kontext-dev:85723d503c17da3f9fd9cecfb9987a8bf60ef747fd8f68a25d7636f88260eb59',
   zoedepth: 'cjwbw/zoedepth:6375723d97400d3ac7b88e3022b738bf6f433ae165c4a2acd1955eaa6b8fcb62',
   realEsrgan: 'cjwbw/real-esrgan:d0ee3d708c9b911f122a4ad90046c5d26a0293b99476d697f6bb7f2e251ce2d4',
   robustVideoMatting:

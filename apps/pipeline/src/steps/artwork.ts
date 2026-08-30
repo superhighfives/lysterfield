@@ -1,50 +1,41 @@
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { forEachFrame, framesDir, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
-import { readFileAsInput, runModelToFile, uploadFileOnce } from '../replicate.ts'
+import { readFileAsInput, runModelToFile } from '../replicate.ts'
 
 export interface ArtworkResult {
   framesDir: string
 }
 
-const STYLE_REFERENCE_PATH = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  'resources',
-  'style',
-  'watercolor-reference.png'
-)
-
 const STYLE_PROMPT =
-  "Repaint the first image entirely in the exact watercolor painting style of the second image: loose wet-on-wet washes, soft bleeding edges, visible paper texture, muted desaturated palette, painterly abstraction with no hard photographic detail. Keep the same composition and content as the first image, but the rendering technique, brushwork, and color treatment must match the second image's watercolor style precisely."
+  'Repaint this photo entirely as a loose watercolor painting: wet-on-wet washes, soft bleeding edges, visible paper texture, muted desaturated palette, painterly abstraction with no hard photographic detail, in the style of a hand-painted watercolor landscape/portrait. Keep the same composition, content, and identity as the original — only the rendering technique changes.'
 
 /**
- * Watercolor style transfer via `nano-banana-2` — see `models.ts` for why
- * this replaced DiffusionCLIP. Called once against the source frames for
- * the "artwork" panel, and again against the background-plate frames for
- * the "background" panel — pass a distinct `outputName` for each. The same
- * fixed style reference image is used for every frame/call, to keep the
- * style consistent across a scene rather than drifting per-frame.
+ * Watercolor style transfer via `flux-kontext-dev` — see `models.ts` for
+ * why this replaced nano-banana-2. Called once against the source frames
+ * for the "artwork" panel, and again against the background-plate frames
+ * for the "background" panel — pass a distinct `outputName` for each.
+ * Unlike nano-banana-2, no separate style-reference image is needed —
+ * kontext-dev reliably preserves the input's identity/composition while
+ * applying the style purely from the prompt.
  */
 export async function artwork(
   job: Job,
   inputFramesDir: string,
   outputName: string,
-  concurrency: number
+  concurrency: number,
+  seed?: number
 ): Promise<ArtworkResult> {
   const outputDir = await framesDir(job, outputName)
-  const styleReferenceUrl = await uploadFileOnce(STYLE_REFERENCE_PATH)
 
   await forEachFrame(inputFramesDir, outputDir, concurrency, async (inputPath, outputPath) => {
     await runModelToFile(
-      MODELS.nanoBanana2,
+      MODELS.artwork,
       {
         prompt: STYLE_PROMPT,
-        image_input: [await readFileAsInput(inputPath), styleReferenceUrl],
+        input_image: await readFileAsInput(inputPath),
         aspect_ratio: 'match_input_image',
         output_format: 'png',
+        ...(seed === undefined ? {} : { seed }),
       },
       outputPath
     )

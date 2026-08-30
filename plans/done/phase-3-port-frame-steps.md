@@ -2,7 +2,7 @@
 title: "Phase 3: scaffold apps/pipeline and port init/matte/background-plate/depth/artwork/background/upscale"
 status: Complete
 created: 2026-08-18
-updated: 2026-08-28
+updated: 2026-08-29
 ---
 
 # Phase 3: scaffold apps/pipeline and port init/matte/background-plate/depth/artwork/background/upscale
@@ -336,12 +336,23 @@ assumed up front:**
    (correct high-contrast depth mask) but not verified byte-for-byte
    against the original Python's output.
 4. **`artwork.ts` doesn't use DiffusionCLIP** (added 2026-08-28, after
-   phase 4 smoke-testing surfaced a 3-hour boot hang on that model). Now
-   `google/nano-banana-2`, steered to DiffusionCLIP's watercolor look via
-   a fixed reference image (`resources/style/watercolor-reference.png`)
-   passed through `image_input` alongside each frame, rather than a
-   dedicated style-transfer checkpoint. See the Open Questions entry above
-   for the comparison and the upscale-factor follow-up it left open.
+   phase 4 smoke-testing surfaced a 3-hour boot hang on that model). First
+   replaced with `google/nano-banana-2`, steered to DiffusionCLIP's
+   watercolor look via a fixed reference image passed through
+   `image_input` alongside each frame. See the Open Questions entry above
+   for that comparison and the upscale-factor follow-up it left open.
+   **Updated again 2026-08-29** (phase 5's real-footage cost check):
+   `nano-banana-2` at $0.07/call, called twice per frame, made a full
+   scene ~$80+ even at a modest 2fps — replaced with `black-forest-labs/
+   flux-kontext-dev` ($0.03/call, an official open-weights image-editing
+   model), which also turned out more temporally stable frame-to-frame on
+   real footage and needs only a text prompt, no style-reference image —
+   `uploadFileOnce()` and `resources/style/watercolor-reference.png` were
+   removed as a result. See
+   [`plans/in-progress/phase-5-end-to-end-parity-check.md`](../in-progress/phase-5-end-to-end-parity-check.md)
+   for the full comparison, including a still-open temporal-flicker gap
+   against the original published videos that neither model fully closed
+   on its own.
 
 Not a deviation, but worth flagging for phase 4/5: DiffusionCLIP's native
 output is 512×512, and Real-ESRGAN's default `upscale: 4` takes that to
