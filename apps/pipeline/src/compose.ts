@@ -126,6 +126,15 @@ async function normalizeFramesPanel(job: Job, name: string, framesDir: string): 
  * 1280x720 output) and, per the user's call, needs looping to fill the
  * audio's full length — the 5s Kling clip is much shorter than a real
  * song. Center-crop to square first so scaling doesn't distort it.
+ *
+ * Also reproduces the legacy pipeline's dream-panel cadence: the original
+ * Deforum frames were only ever generated at 10fps, then held up to the
+ * full output rate with `minterpolate='mi_mode=dup'` (generate-dreaming.sh)
+ * — a deliberate stepped/stop-motion look, not a cost-saving shortcut we
+ * need here (Kling is one call per scene regardless of fps). `fps=10`
+ * first downsamples Kling's native smooth output so `minterpolate`'s dup
+ * mode has 10 real unique frames per second to hold, matching that look
+ * rather than just relabeling the existing smooth motion at a lower rate.
  */
 async function normalizeDreamPanel(job: Job, dreamVideoPath: string, minDuration: number): Promise<string> {
   const out = await jobVideoPath(job, 'panel-dream')
@@ -136,7 +145,7 @@ async function normalizeDreamPanel(job: Job, dreamVideoPath: string, minDuration
     '-i',
     dreamVideoPath,
     '-vf',
-    `crop='min(iw\\,ih)':'min(iw\\,ih)',scale=${PANEL_SIZE}:${PANEL_SIZE}`,
+    `crop='min(iw\\,ih)':'min(iw\\,ih)',scale=${PANEL_SIZE}:${PANEL_SIZE},fps=10,minterpolate='mi_mode=dup:fps=${job.fps}'`,
     '-t',
     String(minDuration),
     '-c:v',
