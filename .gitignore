@@ -18,6 +18,7 @@ dist-ssr
 # Cog model weights — large binaries, not committed. See models/*/README.md.
 models/**/*.pkl
 models/**/*.pth
+models/**/*.pt
 models/**/.cog
 models/**/__pycache__
 models/**/output.png

@@ -1,0 +1,47 @@
+build:
+  # gpu: true is load-bearing here, unlike outline — DiffusionCLIP does real
+  # per-frame diffusion sampling (40 inversion + 12 generative steps over a
+  # 512x512 U-Net), not a trivial model. run.py hardcodes cuda:0 in a few
+  # spots (no clean CPU fallback), and even where it wouldn't hard-fail,
+  # CPU would be far too slow for per-frame throughput.
+  cuda: "11.7"
+  gpu: true
+  python_version: "3.10"
+  system_packages:
+    - "libgl1-mesa-glx"
+    - "libglib2.0-0"
+  python_requirements: cog-requirements.txt
+
+  run:
+    # python3 -> python symlink: same fix as models/outline/cog.yaml — the
+    # default CUDA base image only provides python3, and cog's own
+    # verification step fails without this.
+    - ln -sf $(which python3) /usr/bin/python
+    # Checkpoint fetches first, each in its own layer, cached by command
+    # text not file content — so editing run.py/cog.yaml later doesn't
+    # force re-uploading these multi-GB files. Neither is committed
+    # (gitignored + .dockerignore'd); this is the only place they come
+    # from. Two separate checkpoints are both required — DiffusionCLIP
+    # blends the fine-tuned style model with the original base diffusion
+    # model at inference time (see diffusionclip.py's edit_one_image,
+    # which loads model_paths = [None, args.model_path] — the `None`
+    # entry resolves to MODEL_PATHS['IMAGENET'] in configs/paths_config.py).
+    # Absolute /src/... paths are load-bearing: these `run:` steps execute
+    # before cog's own `WORKDIR /src`, so a relative path here lands at
+    # the container root, not where run.py's relative "pretrained/..." /
+    # "checkpoint/..." paths actually resolve at request time (confirmed
+    # by inspecting the built image directly — a real bug, not a guess).
+    # - the base (unconditional) ImageNet diffusion model, from OpenAI's
+    #   guided-diffusion project
+    - mkdir -p /src/pretrained && curl -L -o /src/pretrained/512x512_diffusion.pt https://openaipublic.blob.core.windows.net/diffusion/jul-2021/512x512_diffusion.pt
+    # - our fine-tuned watercolor-style checkpoint (Google Drive, hence gdown)
+    - pip install gdown
+    - mkdir -p /src/checkpoint && gdown 1l1vLwdL-6kC9jKcStASZ0KtX2OrmrSj6 -O /src/checkpoint/imagenet_watercolor_t601.pth
+    - pip install dlib
+    # NOT `pip install clip` — that's an unrelated PyPI package (a CLI
+    # tool). The code calls clip.load()/clip.tokenize(), OpenAI CLIP's
+    # real API, which only exists in the git package, per the upstream
+    # README (the original cog.yaml had this same bug).
+    - pip install git+https://github.com/openai/CLIP.git
+
+run: "run.py:Runner"
