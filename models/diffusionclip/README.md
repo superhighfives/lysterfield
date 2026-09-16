@@ -179,133 +179,17 @@ We provide a wide range of types of edits, and you can also upload your fine-tun
 
 
 
-## DiffusionCLIP Fine-tuning 
+## Fine-tuning and other applications (not in this deployment)
 
-
-To fine-tune the pretrained Diffusion model guided by CLIP, run the following commands:
-
-```
-python main.py --clip_finetune          \
-               --config celeba.yml      \
-               --exp ./runs/test        \
-               --edit_attr neanderthal  \
-               --do_train 1             \
-               --do_test 1              \
-               --n_train_img 50         \
-               --n_test_img 10          \
-               --n_iter 5               \
-               --t_0 500                \
-               --n_inv_step 40          \
-               --n_train_step 6         \
-               --n_test_step 40         \
-               --lr_clip_finetune 8e-6  \
-               --id_loss_w 0            \
-               --l1_loss_w 1            
-```
-- You can use `--clip_finetune_eff` instead of `--clip_finetune` to save GPU memory.
-- `config`: `celeba.yml` for human face, `bedroom.yml` for bedroom, `church.yml` for church, `afhq.yml` for dog face and , `imagenet.yml` for images from ImageNet.
-- `exp`: Experiment name.
-- `edit_attr`: Attribute to edit, you can use `./utils/text_dic.py` to predefined source-target text pairs or define new pair. 
-  - Instead, you can use `--src_txts` and `--trg_txts`. 
-- `do_train`, `do_test`: If you finish training quickly withouth checking the outputs in the middle of training, you can set `do_test` as 1.
-- `n_train_img`, `n_test_img`: # of images in the trained domain for training and test.        
-- `n_iter`: # of iterations of a generative process with `n_train_img` images.
-- `t_0`: Return step in [0, 1000), high `t_0` enable severe change but may lose more identity or semantics in the original image.  
-- `n_inv_step`, `n_train_step`, `n_test_step`: # of steps during the generative pross for the inversion, training and test respectively. They are in `[0, t_0]`. We usually use 40, 6 and 40  for `n_inv_step`, `n_train_step` and `n_test_step` respectively. 
-   - We found that the manipulation quality is better when `n_***_step` does not divide `t_0`. So we usally use 301, 401, 500 or 601 for `t_0`.
-- `lr_clip_finetune`: Initial learning rate for CLIP-guided fine-tuning.
-- `id_loss_w`, `l1_loss` : Weights of ID loss and L1 loss when CLIP loss weight is 3.
-
-
-
-## Novel Applications
-
-The fine-tuned models through DiffusionCLIP can be leveraged to perform the several novel applications. 
-
-### Manipulation of Images in Trained Domain & to Unseen Domain
-![](imgs/app_1_manipulation.png)
-
-You can edit one image into the CLIP-guided domain by running the following command:
-``` 
-python main.py --edit_one_image            \
-               --config celeba.yml         \
-               --exp ./runs/test           \
-               --t_0 500                   \
-               --n_inv_step 40             \
-               --n_test_step 40            \
-               --n_iter 1                  \
-               --img_path imgs/celeb1.png  \
-               --model_path  checkpoint/neanderthal.pth
-```
-- `img_path`: Path of an image to edit
-- `model_path`: Finetuned model path to use
-
-You can edit multiple images from the dataset into the CLIP-guided domain by running the following command:
-```
-python main.py --edit_images_from_dataset  \
-               --config celeba.yml         \
-               --exp ./runs/test           \
-               --n_test_img 50             \
-               --t_0 500                   \
-               --n_inv_step 40             \
-               --n_test_step 40            \
-               --model_path checkpoint/neanderthal.pth
-```
- 
-
-### Image Translation from Unseen Domain into Another Unseen Domain
-![](imgs/app_2_unseen2unseen.png)
-
-
-###  Generation of Images in Unseen Domain from Strokes
-![](imgs/app_3_stroke2unseen.png)
-You can tranlate images from an unseen domain to another unseen domain. (e.g. Stroke/Anime ➝ Neanderthal) using following command: 
-
-```
-python main.py --unseen2unseen          \
-               --config celeba.yml      \
-               --exp ./runs/test        \
-               --t_0 500                \
-               --bs_test 4              \
-               --n_iter 10              \
-               --n_inv_step 40          \
-               --n_test_step 40         \
-               --img_path imgs/stroke1.png \
-               --model_path  checkpoint/neanderthal.pth
-```
-- `img_path`: Stroke image or source image in the unseen domain e.g. portrait
-- `n_iter`: # of iterations of stochastic foward and generative processes to translate an unseen source image into the image in the trained domain. It's required to be larger than 8. 
-
-### Multiple Attribute Changes
-![](imgs/app_4_multiple_change.png)
-You can change multiple attributes thorugh only one generative process by mixing the noise from the multipe fintuned models.
-1. Set `HYBRID_MODEL_PATHS` of `HYBRID_CONFIG` in `./configs/paths_config`. The keys of 
-2. Run the commands for above **Manipulation of Images in Trained Domain & to Unseen Domain** with `--hybrid_noise 1`   
-
-```
-HYBRID_MODEL_PATHS = [
-	'curly_hair.pth',
-	'makeup.pth',
-]
-
-HYBRID_CONFIG = \
-	{ 300: [1, 0],**
-	    0: [0.3, 0.7]}
-```
-
-The keys and values of `HYBRID_CONFIG` dictionary correspond to thresholds and ratios for the noise mixing process using multiple models. The following pseudo-code represent the noise mixing process. The full codes are in `./utils/diffusion_utils.py`.
-```
-# models: list of the finetuned diffusion models 
-
-for thr in list(HYBRID_CONFIG.keys()):
-    if t >= thr:
-        et = 0
-        for i, ratio in enumerate(HYBRID_CONFIG[thr]):
-            ratio /= sum(HYBRID_CONFIG[thr])
-            et_i = models[i](xt, t)
-            et += ratio * et_i
-        break
-```
+Upstream documents CLIP fine-tuning plus several manipulation/translation
+applications (human/dog face, church, bedroom) — see the **Scope** section
+at the top of this file for why none of that is wired up here. Those
+commands referenced `--config celeba.yml`/`bedroom.yml`/`church.yml`/
+`afhq.yml`, which this deployment doesn't carry (removed along with the
+matching unused dataset loaders — see `datasets/data_utils.py`), so the
+original examples are cut rather than left pointing at configs that no
+longer exist in this tree. See the upstream repo linked above for the
+full fine-tuning and application walkthroughs.
 
 ## Finetuned Models Using DiffuionCLIP
 
