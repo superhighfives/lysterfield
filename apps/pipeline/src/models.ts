@@ -10,23 +10,20 @@
  */
 export const MODELS = {
   /**
-   * Artwork step — replaced `gwang-kim/diffusionclip` (a 2022, cog 0.4.1
-   * community model) after it hit a 3-hour boot hang mid-pipeline; see
-   * phase 3's plan for that diagnosis. First replacement was Google's
-   * `nano-banana-2` (matched the watercolor style convincingly, given the
-   * frame plus a style-reference image via `image_input`) but at
-   * $0.07/call and two calls per frame (artwork + background panels),
-   * cost was the dominant line item — phase 5's real-footage cost check
-   * put a full scene at ~$80+ even at a modest 2fps, ~$1,800+ at the
-   * legacy pipeline's 60fps. Replaced again with `black-forest-labs/
-   * flux-kontext-dev`: an official, open-weights image-editing model that
-   * preserves the source frame's identity/composition while applying the
-   * watercolor look purely from a text prompt — no separate style-
-   * reference image needed, unlike nano-banana-2. See phase 5's plan for
-   * the cost/quality comparison.
+   * Artwork step — went through nano-banana-2 and flux-kontext-dev after
+   * the original public `gwang-kim/diffusionclip` listing turned out to
+   * have an unreliable, sometimes multi-hour cold boot (phase 3's plan).
+   * Both replacements were cheaper/more reliable, but neither reproduced
+   * DiffusionCLIP's actual look — flux-kontext-dev in particular resisted
+   * being pushed toward a looser, more painterly style via prompting no
+   * matter how hard (see phase 5's plan). Landed back on DiffusionCLIP
+   * itself, now self-hosted at `superhighfives/diffusionclip`
+   * (`models/diffusionclip/`) instead of depending on the abandoned
+   * public listing — same real style, $0.02/call, and (with the
+   * deployment's min instances set to 1) no cold boot either.
    */
   artwork:
-    'black-forest-labs/flux-kontext-dev:85723d503c17da3f9fd9cecfb9987a8bf60ef747fd8f68a25d7636f88260eb59',
+    'superhighfives/diffusionclip:67ec618b47194f7d6776ebadd6985c851ecab8d9b2399cb335a0f86e773ce93d',
   zoedepth: 'cjwbw/zoedepth:6375723d97400d3ac7b88e3022b738bf6f433ae165c4a2acd1955eaa6b8fcb62',
   realEsrgan: 'cjwbw/real-esrgan:d0ee3d708c9b911f122a4ad90046c5d26a0293b99476d697f6bb7f2e251ce2d4',
   robustVideoMatting:

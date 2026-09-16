@@ -76,13 +76,7 @@ switch (step) {
 
   case 'artwork': {
     const job = await loadJob(requireFlag('job'))
-    const result = await artwork(
-      job,
-      frameDirFlag(job, 'source'),
-      requireFlag('output'),
-      concurrency,
-      flags.seed ? Number(flags.seed) : undefined
-    )
+    const result = await artwork(job, frameDirFlag(job, 'source'), requireFlag('output'), concurrency)
     console.log(JSON.stringify(result, null, 2))
     break
   }

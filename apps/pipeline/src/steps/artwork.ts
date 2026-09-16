@@ -6,24 +6,23 @@ export interface ArtworkResult {
   framesDir: string
 }
 
-const STYLE_PROMPT =
-  'Repaint this photo entirely as a loose watercolor painting: wet-on-wet washes, soft bleeding edges, visible paper texture, muted desaturated palette, painterly abstraction with no hard photographic detail, in the style of a hand-painted watercolor landscape/portrait. Keep the same composition, content, and identity as the original — only the rendering technique changes.'
-
 /**
- * Watercolor style transfer via `flux-kontext-dev` — see `models.ts` for
- * why this replaced nano-banana-2. Called once against the source frames
- * for the "artwork" panel, and again against the background-plate frames
- * for the "background" panel — pass a distinct `outputName` for each.
- * Unlike nano-banana-2, no separate style-reference image is needed —
- * kontext-dev reliably preserves the input's identity/composition while
- * applying the style purely from the prompt.
+ * Watercolor style transfer via our self-hosted DiffusionCLIP deployment —
+ * see `models.ts` for why this replaced flux-kontext-dev/nano-banana-2.
+ * Called once against the source frames for the "artwork" panel, and
+ * again against the background-plate frames for the "background" panel —
+ * pass a distinct `outputName` for each.
+ *
+ * No seed needed for temporal consistency across frames: `run.py`'s
+ * inversion/sampling config (deterministic DDIM inversion, eta=0) never
+ * injects fresh randomness per call, so similar consecutive video frames
+ * already produce similarly-varying output on their own.
  */
 export async function artwork(
   job: Job,
   inputFramesDir: string,
   outputName: string,
-  concurrency: number,
-  seed?: number
+  concurrency: number
 ): Promise<ArtworkResult> {
   const outputDir = await framesDir(job, outputName)
 
@@ -31,11 +30,8 @@ export async function artwork(
     await runModelToFile(
       MODELS.artwork,
       {
-        prompt: STYLE_PROMPT,
-        input_image: await readFileAsInput(inputPath),
-        aspect_ratio: 'match_input_image',
-        output_format: 'png',
-        ...(seed === undefined ? {} : { seed }),
+        image: await readFileAsInput(inputPath),
+        n_test_step: 12,
       },
       outputPath
     )
