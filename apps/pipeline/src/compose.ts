@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
-import { compileFramesToVideo, firstFrame, videoPath as jobVideoPath, type Job } from './job.ts'
+import { compileFramesToVideo, dynamicPath, firstFrame, videoPath as jobVideoPath, type Job } from './job.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -27,8 +27,10 @@ export interface ComposeInput {
   matteFramesDir: string
   depthFramesDir: string
   outlineFramesDir: string
-  /** dream.ts output — raw Kling clip, not yet normalized */
-  dreamVideoPath: string
+  /** Which dream attempt to composite — see job.ts's `dynamicPath`. Every output below is written under `dynamic/<take>/`. */
+  take: string
+  /** dream.ts output — raw Kling clip, not yet normalized. Defaults to `dynamic/<take>/dream.mp4`; override only for one-off tests against an arbitrary file. */
+  dreamVideoPath?: string
 }
 
 export interface ComposeResult {
@@ -51,35 +53,37 @@ export interface ComposeResult {
  * video/video-small/loop/hero compression passes.
  */
 export async function compose(job: Job, input: ComposeInput): Promise<ComposeResult> {
-  await mkdir(path.join(job.dir, 'video'), { recursive: true })
+  const staticDir = path.join(job.dir, 'static')
+  await mkdir(staticDir, { recursive: true })
 
   const audioDuration = await probeDuration(AUDIO_PATH)
+  const dreamVideoPath = input.dreamVideoPath ?? (await dynamicPath(job, input.take, 'dream', 'mp4'))
 
   const artworkPanel = await normalizeFramesPanel(job, 'artwork', input.artworkFramesDir)
   const backgroundPanel = await normalizeFramesPanel(job, 'background', input.backgroundFramesDir)
   const mattePanel = await normalizeFramesPanel(job, 'matte', input.matteFramesDir)
   const depthPanel = await normalizeFramesPanel(job, 'depth', input.depthFramesDir)
   const outlinePanel = await normalizeFramesPanel(job, 'outline', input.outlineFramesDir)
-  const dreamPanel = await normalizeDreamPanel(job, input.dreamVideoPath, audioDuration)
+  const dreamPanel = await normalizeDreamPanel(job, input.take, dreamVideoPath, audioDuration)
 
-  const compositeVideoPath = await jobVideoPath(job, 'composite')
+  const compositeVideoPath = await dynamicPath(job, input.take, 'composite')
   await hstackWithAudio(
     [WORDS_VIDEO_PATH, artworkPanel, backgroundPanel, mattePanel, depthPanel, outlinePanel, dreamPanel],
     compositeVideoPath,
     { fps: job.fps, duration: audioDuration }
   )
 
-  const videoPath = await jobVideoPath(job, 'video')
-  const videoWebmPath = await jobVideoPath(job, 'video', 'webm')
+  const videoPath = await dynamicPath(job, input.take, 'video')
+  const videoWebmPath = await dynamicPath(job, input.take, 'video', 'webm')
   await compress(compositeVideoPath, videoPath)
   await compress(compositeVideoPath, videoWebmPath)
 
-  const videoSmallPath = await jobVideoPath(job, 'video-small')
-  const videoSmallWebmPath = await jobVideoPath(job, 'video-small', 'webm')
+  const videoSmallPath = await dynamicPath(job, input.take, 'video-small')
+  const videoSmallWebmPath = await dynamicPath(job, input.take, 'video-small', 'webm')
   await compress(compositeVideoPath, videoSmallPath, { half: true })
   await compress(compositeVideoPath, videoSmallWebmPath, { half: true })
 
-  const loopPath = await jobVideoPath(job, 'loop')
+  const loopPath = await dynamicPath(job, input.take, 'loop')
   await execFileAsync('ffmpeg', [
     '-y',
     '-ss',
@@ -97,7 +101,10 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
     loopPath,
   ])
 
-  const heroImagePath = path.join(job.dir, 'video', 'hero.jpg')
+  // Take-independent — only depends on the artwork panel, so it lives under
+  // static/ rather than dynamic/<take>/ even though compose() recomputes it
+  // on every call (cheap local resize, not worth caching separately).
+  const heroImagePath = path.join(staticDir, 'hero.jpg')
   await sharp(await firstFrame(input.artworkFramesDir))
     .resize(PANEL_SIZE, PANEL_SIZE)
     .jpeg({ quality: 85 })
@@ -114,7 +121,7 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
   }
 }
 
-/** Compiles a frame folder into a PANEL_SIZE² square panel video — every frame-based panel is already square, so this is a plain resize, no crop. */
+/** Compiles a frame folder into a PANEL_SIZE² square panel video — every frame-based panel is already square, so this is a plain resize, no crop. Take-independent, so it's cached under static/ via jobVideoPath. */
 async function normalizeFramesPanel(job: Job, name: string, framesDir: string): Promise<string> {
   const out = await jobVideoPath(job, `panel-${name}`)
   await compileFramesToVideo(framesDir, out, { fps: job.fps, scale: `${PANEL_SIZE}:${PANEL_SIZE}` })
@@ -136,8 +143,13 @@ async function normalizeFramesPanel(job: Job, name: string, framesDir: string): 
  * mode has 10 real unique frames per second to hold, matching that look
  * rather than just relabeling the existing smooth motion at a lower rate.
  */
-async function normalizeDreamPanel(job: Job, dreamVideoPath: string, minDuration: number): Promise<string> {
-  const out = await jobVideoPath(job, 'panel-dream')
+async function normalizeDreamPanel(
+  job: Job,
+  take: string,
+  dreamVideoPath: string,
+  minDuration: number
+): Promise<string> {
+  const out = await dynamicPath(job, take, 'panel-dream')
   await execFileAsync('ffmpeg', [
     '-y',
     '-stream_loop',

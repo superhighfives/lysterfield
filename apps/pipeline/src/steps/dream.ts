@@ -1,4 +1,4 @@
-import { firstFrame, videoPath, type Job } from '../job.ts'
+import { dynamicPath, exists, firstFrame, framesDir, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
 import { readFileAsInput, runModelToFile } from '../replicate.ts'
 
@@ -13,6 +13,8 @@ export interface DreamOptions {
   styleRefPath: string
   /** Source frame to animate from. Defaults to the job's first `frames/source/` frame. */
   framePath?: string
+  /** Name for this dream attempt — written to `dynamic/<take>/dream.mp4`, never overwriting another take. */
+  take: string
 }
 
 /**
@@ -27,22 +29,25 @@ export interface DreamOptions {
  * frame-rate/resize normalization here, that's compose.ts's job (phase 4).
  */
 export async function dream(job: Job, opts: DreamOptions): Promise<DreamResult> {
-  const outputPath = await videoPath(job, 'dream', 'mp4')
-  const framePath = opts.framePath ?? (await firstFrame(`${job.dir}/frames/source`))
+  const outputPath = await dynamicPath(job, opts.take, 'dream', 'mp4')
 
-  await runModelToFile(
-    MODELS.dream,
-    {
-      prompt: opts.prompt,
-      start_image: await readFileAsInput(framePath),
-      reference_images: [await readFileAsInput(opts.styleRefPath)],
-      duration: 5,
-      mode: 'standard',
-      aspect_ratio: '16:9',
-      generate_audio: false,
-    },
-    outputPath
-  )
+  if (!(await exists(outputPath))) {
+    const framePath = opts.framePath ?? (await firstFrame(await framesDir(job, 'source')))
+
+    await runModelToFile(
+      MODELS.dream,
+      {
+        prompt: opts.prompt,
+        start_image: await readFileAsInput(framePath),
+        reference_images: [await readFileAsInput(opts.styleRefPath)],
+        duration: 5,
+        mode: 'standard',
+        aspect_ratio: '16:9',
+        generate_audio: false,
+      },
+      outputPath
+    )
+  }
 
   return { videoPath: outputPath }
 }

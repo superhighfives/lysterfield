@@ -26,16 +26,42 @@ export async function loadJob(dir: string): Promise<Job> {
   return { dir, fps }
 }
 
-/** Ensures `<job.dir>/frames/<name>/` exists and returns its path. */
+/**
+ * Ensures `<job.dir>/static/frames/<name>/` exists and returns its path.
+ * "static" because every per-frame intermediate (source, alpha, artwork,
+ * background-plate, depth, outline, and their upscales) is independent of
+ * which dream take eventually gets composited — generate once, reuse
+ * across every take. See `dynamicPath` for the per-take counterpart.
+ */
 export async function framesDir(job: Job, name: string): Promise<string> {
-  const dir = path.join(job.dir, 'frames', name)
+  const dir = path.join(job.dir, 'static', 'frames', name)
   await mkdir(dir, { recursive: true })
   return dir
 }
 
-/** Ensures `<job.dir>/video/` exists and returns the path for `<name>.<ext>` (default `mov`). */
+/**
+ * Ensures `<job.dir>/static/video/` exists and returns the path for
+ * `<name>.<ext>` (default `mov`) — take-independent video intermediates:
+ * `init`'s cropped/original/full source compiles, `matte`'s alpha-source,
+ * and compose.ts's per-panel compiles (panel-artwork etc). See
+ * `dynamicPath` for outputs that depend on which dream take is selected.
+ */
 export async function videoPath(job: Job, name: string, ext = 'mov'): Promise<string> {
-  const dir = path.join(job.dir, 'video')
+  const dir = path.join(job.dir, 'static', 'video')
+  await mkdir(dir, { recursive: true })
+  return path.join(dir, `${name}.${ext}`)
+}
+
+/**
+ * Ensures `<job.dir>/dynamic/<take>/` exists and returns the path for
+ * `<name>.<ext>` (default `mov`) — everything downstream of one specific
+ * dream generation: the raw clip itself, its normalized panel, the
+ * composite, and every final export. `take` is a caller-chosen name (e.g.
+ * `take-1`), so a scene can carry several dream attempts side by side
+ * without re-running steps 1-6 or colliding with each other.
+ */
+export async function dynamicPath(job: Job, take: string, name: string, ext = 'mov'): Promise<string> {
+  const dir = path.join(job.dir, 'dynamic', take)
   await mkdir(dir, { recursive: true })
   return path.join(dir, `${name}.${ext}`)
 }

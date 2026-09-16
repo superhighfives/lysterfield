@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeClientAssets } from './client-manifest.ts'
 import { compose } from './compose.ts'
-import { loadJob, type Job } from './job.ts'
+import { loadJob, videoPath, type Job } from './job.ts'
 import { artwork } from './steps/artwork.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
 import { depth } from './steps/depth.ts'
@@ -22,10 +22,13 @@ const DEFAULT_CLIENT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)
  * A single `lysterfield generate` command that chains every step end to
  * end is phase 4's job, once compose.ts and client-manifest writing exist.
  *
- * Frame folders are addressed by name within `<job>/frames/` — `source`
- * and `alpha` are the well-known names `init`/`matte` write to; `artwork`/
- * `upscale` take an explicit --output name since they're called twice each
- * (once for the artwork panel, once for the background panel).
+ * Frame folders are addressed by name within `<job>/static/frames/` —
+ * `source` and `alpha` are the well-known names `init`/`matte` write to;
+ * `artwork`/`upscale` take an explicit --output name since they're called
+ * twice each (once for the artwork panel, once for the background panel).
+ * `dream`/`compose` additionally take a --take name so a scene can carry
+ * several dream attempts under `<job>/dynamic/<take>/` side by side — see
+ * job.ts's `dynamicPath`.
  */
 
 const [step, ...rest] = process.argv.slice(2)
@@ -38,7 +41,7 @@ function requireFlag(name: string): string {
 }
 
 function frameDirFlag(job: Job, name: string, flag = 'input'): string {
-  return path.join(job.dir, 'frames', flags[flag] ?? name)
+  return path.join(job.dir, 'static', 'frames', flags[flag] ?? name)
 }
 
 const concurrency = Number(flags.concurrency ?? 4)
@@ -57,7 +60,7 @@ switch (step) {
 
   case 'matte': {
     const job = await loadJob(requireFlag('job'))
-    const croppedVideoPath = path.join(job.dir, 'video', 'cropped.mov')
+    const croppedVideoPath = await videoPath(job, 'cropped')
     console.log(JSON.stringify(await matte(job, croppedVideoPath), null, 2))
     break
   }
@@ -125,6 +128,7 @@ switch (step) {
       prompt: requireFlag('prompt'),
       styleRefPath: requireFlag('style-ref'),
       framePath: flags.frame,
+      take: requireFlag('take'),
     })
     console.log(JSON.stringify(result, null, 2))
     break
@@ -139,7 +143,8 @@ switch (step) {
       matteFramesDir: frameDirFlag(job, 'alpha', 'matte'),
       depthFramesDir: frameDirFlag(job, 'depth', 'depth'),
       outlineFramesDir: frameDirFlag(job, 'outline', 'outline'),
-      dreamVideoPath: flags.dream ?? path.join(job.dir, 'video', 'dream.mp4'),
+      take: requireFlag('take'),
+      dreamVideoPath: flags.dream,
     })
     console.log(JSON.stringify(result, null, 2))
 
