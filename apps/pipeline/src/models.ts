@@ -33,9 +33,16 @@ export const MODELS = {
    * tried `jd7h/propainter` (temporally-consistent video inpainting) — its
    * Cog wrapper's mask-extension validation fails against every
    * Replicate-hosted file URL, reproduced via raw API calls with clean
-   * URLs, so it's a bug in that model, not fixable from our side.
+   * URLs, so it's a bug in that model, not fixable from our side. Fell back
+   * to prompt-free `allenhooo/lama`, but its fill hallucinated a
+   * woven-fabric texture over the subject instead of continuing the
+   * meadow. Swapped for prompt-guided `black-forest-labs/flux-fill-pro`
+   * after a side-by-side against flux-fill-dev and stable-diffusion-
+   * inpainting — the only candidate that fully removed the subject with a
+   * seamless, photorealistic result. Same mask convention as LaMa (white =
+   * inpaint region), so no change needed on the caller side.
    */
-  lama: 'allenhooo/lama:cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72',
+  backgroundInpaint: 'black-forest-labs/flux-fill-pro:41c767bcbfffe54ef8f05eb4d0100f9314790f7fc43a7b88d73ec06839deddb9',
   /** Dreaming step — see phase 2's prototyping for why this was picked over Grok Imagine. */
   dream:
     'kwaivgi/kling-v3-omni-video:460d4f46adf3c29abbcd8f42cf5434570da6b50a39ec4593f2006486b1dd3fba',
