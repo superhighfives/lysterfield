@@ -2,7 +2,7 @@
 title: "Panel 3 (background) flicker mitigation on real footage"
 status: In Progress
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-18
 ---
 
 # Panel 3 (background) flicker mitigation on real footage
@@ -390,18 +390,36 @@ zone/stepped experiments' source data stays intact).
 - [x] Detect and repair person-leak failures in `background-soft` (8/361
       frames) — local skin-tone detector + nearest-neighbor patch, all
       downstream derived assets rebuilt and re-verified clean
-- [ ] Formalize the leak detector into a real pipeline validation step
-- [ ] Formalize the chosen technique (mci-mask masked-stepped on
-      `background-soft`) into real `src/steps/*.ts` code wired into
-      `compose.ts`/`cli.ts` (currently all scratch scripts under `/tmp`)
+- [x] Formalize the leak detector into a real pipeline module
+      (`src/leak-detection.ts`) — found and fixed a real bug while porting
+      from the scratch script: alpha frames (2160×2160) were never resized
+      to match the fill (1024×1024), so every pixel lookup was misaligned
+      and the first version of the real code detected nothing. Verified
+      against the exact known-good/known-bad frames from the scratch
+      version before trusting it again.
+- [x] Formalize the chosen technique into a real pipeline step
+      (`src/steps/background-stabilize.ts`, wired into `cli.ts` as
+      `background-stabilize`, `compose` now defaults to its
+      `background-stable` output). Improved on the scratch version during
+      formalization: keyframe selection is now deterministic own-arithmetic
+      instead of relying on ffmpeg's implicit `fps=` frame-selection
+      (which is what caused the earlier off-by-one repair mistake) — this
+      also fixed the 361→353 frame-count drift the scratch version had,
+      and leak detection/repair now runs automatically as part of the step,
+      scoped correctly to only the keyframes that actually surface in the
+      output. Re-ran against the real job's data end to end: reproduced the
+      same two repairs (different specific frame numbers, since this
+      version's keyframe phase differs, but the same underlying windows),
+      confirmed clean via full-clip audit, and confirmed exactly 361 frames
+      out (no drift).
+- [x] Decide the fate of the parked depth-based `steps/shadow.ts` halo —
+      dropped, in favor of the WebGL contact shadow.
+- [x] Commit the accumulated work — pipeline (reorder fix, size
+      optimization, background-stabilize, leak-detection, mask.ts
+      extraction) and the client shader change, one commit.
 - [ ] Live-verify the WebGL contact shadow against a real scene; flip
-      `FEET_DIR` if needed, tune reach/opacity
-- [ ] Decide the fate of the parked depth-based `steps/shadow.ts` halo —
-      superseded by the WebGL contact shadow, or still wanted separately?
-- [ ] Commit the accumulated uncommitted work in `apps/pipeline` (reorder
-      fix, size optimization, static/dynamic restructuring, shadow.ts) and
-      the `apps/client` shader change — not yet requested by the user,
-      flagged here so it isn't lost
+      `FEET_DIR` if needed, tune reach/opacity — still needs the user's own
+      eyes, no full-atlas video fixture exists locally to test against
 
 ## Open questions
 
