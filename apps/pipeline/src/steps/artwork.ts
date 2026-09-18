@@ -33,7 +33,8 @@ export async function artwork(
         image: await readFileAsInput(inputPath),
         n_test_step: 12,
       },
-      outputPath
+      outputPath,
+      { jpegQuality: 90 }
     )
   })
 

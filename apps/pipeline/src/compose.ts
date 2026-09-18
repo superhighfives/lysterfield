@@ -22,7 +22,7 @@ export const AUDIO_PATH = path.join(RESOURCES_DIR, 'audio', 'lysterfield-lake.wa
 export interface ComposeInput {
   /** upscale.ts output on the raw source frames */
   artworkFramesDir: string
-  /** upscale.ts output on the background-plate frames */
+  /** background-plate.ts output, run directly on `artworkFramesDir` — already at PANEL_SIZE, no separate upscale needed (see background-plate.ts) */
   backgroundFramesDir: string
   matteFramesDir: string
   depthFramesDir: string
@@ -59,11 +59,11 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
   const audioDuration = await probeDuration(AUDIO_PATH)
   const dreamVideoPath = input.dreamVideoPath ?? (await dynamicPath(job, input.take, 'dream', 'mp4'))
 
-  const artworkPanel = await normalizeFramesPanel(job, 'artwork', input.artworkFramesDir)
-  const backgroundPanel = await normalizeFramesPanel(job, 'background', input.backgroundFramesDir)
-  const mattePanel = await normalizeFramesPanel(job, 'matte', input.matteFramesDir)
-  const depthPanel = await normalizeFramesPanel(job, 'depth', input.depthFramesDir)
-  const outlinePanel = await normalizeFramesPanel(job, 'outline', input.outlineFramesDir)
+  const artworkPanel = await normalizeFramesPanel(job, 'artwork', input.artworkFramesDir, 'jpg')
+  const backgroundPanel = await normalizeFramesPanel(job, 'background', input.backgroundFramesDir, 'jpg')
+  const mattePanel = await normalizeFramesPanel(job, 'matte', input.matteFramesDir, 'png')
+  const depthPanel = await normalizeFramesPanel(job, 'depth', input.depthFramesDir, 'jpg')
+  const outlinePanel = await normalizeFramesPanel(job, 'outline', input.outlineFramesDir, 'jpg')
   const dreamPanel = await normalizeDreamPanel(job, input.take, dreamVideoPath, audioDuration)
 
   const compositeVideoPath = await dynamicPath(job, input.take, 'composite')
@@ -121,10 +121,10 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
   }
 }
 
-/** Compiles a frame folder into a PANEL_SIZE² square panel video — every frame-based panel is already square, so this is a plain resize, no crop. Take-independent, so it's cached under static/ via jobVideoPath. */
-async function normalizeFramesPanel(job: Job, name: string, framesDir: string): Promise<string> {
+/** Compiles a frame folder into a PANEL_SIZE² square panel video — every frame-based panel is already square, so this is a plain resize, no crop. Take-independent, so it's cached under static/ via jobVideoPath. `ext` must match the frame folder's actual format (alpha/matte stays png; everything else is jpg — see init.ts). */
+async function normalizeFramesPanel(job: Job, name: string, framesDir: string, ext: 'png' | 'jpg'): Promise<string> {
   const out = await jobVideoPath(job, `panel-${name}`)
-  await compileFramesToVideo(framesDir, out, { fps: job.fps, scale: `${PANEL_SIZE}:${PANEL_SIZE}` })
+  await compileFramesToVideo(framesDir, out, { fps: job.fps, scale: `${PANEL_SIZE}:${PANEL_SIZE}`, ext })
   return out
 }
 

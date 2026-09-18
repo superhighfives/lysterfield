@@ -1,6 +1,6 @@
 import { unlink } from 'node:fs/promises'
 import sharp from 'sharp'
-import { forEachFrame, framesDir, type Job } from '../job.ts'
+import { forEachFrame, framesDir, siblingFramePath, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
 import { runModelToFile } from '../replicate.ts'
 
@@ -33,7 +33,7 @@ export async function depth(
   const outputDir = await framesDir(job, 'depth')
 
   await forEachFrame(sourceFramesDir, outputDir, concurrency, async (inputPath, outputPath) => {
-    const alphaPath = inputPath.replace(sourceFramesDir, alphaFramesDir)
+    const alphaPath = await siblingFramePath(inputPath, alphaFramesDir)
     const compositePng = await compositeOnTransparent(inputPath, alphaPath)
 
     const modelOutputPath = `${outputPath}.model.png`
@@ -91,6 +91,6 @@ async function gammaAndRescale(inputPath: string, outputPath: string): Promise<v
   }
 
   await sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } })
-    .png()
+    .jpeg({ quality: 90 })
     .toFile(outputPath)
 }

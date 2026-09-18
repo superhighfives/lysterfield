@@ -1,5 +1,5 @@
 import sharp from 'sharp'
-import { forEachFrame, framesDir, type Job } from '../job.ts'
+import { forEachFrame, framesDir, siblingFramePath, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
 import { runModelToFile } from '../replicate.ts'
 
@@ -32,8 +32,8 @@ export async function outline(
   const outputDir = await framesDir(job, 'outline')
 
   await forEachFrame(sourceFramesDir, outputDir, concurrency, async (inputPath, outputPath) => {
-    const alphaPath = inputPath.replace(sourceFramesDir, alphaFramesDir)
-    const depthPath = inputPath.replace(sourceFramesDir, depthFramesDir)
+    const alphaPath = await siblingFramePath(inputPath, alphaFramesDir)
+    const depthPath = await siblingFramePath(inputPath, depthFramesDir)
 
     const cutout = await compositeOnWhite(inputPath, alphaPath)
     const blended = await softLightBlend(cutout, depthPath, 0.5)
@@ -42,7 +42,8 @@ export async function outline(
     await runModelToFile(
       MODELS.outline,
       { image: new File([new Uint8Array(brightened)], 'frame.png') },
-      outputPath
+      outputPath,
+      { jpegQuality: 90 }
     )
   })
 

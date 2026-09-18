@@ -13,7 +13,7 @@ export interface Job {
 }
 
 /** Creates a new job, persisting its metadata to `<dir>/job.json` so `loadJob` can pick it up later. */
-export async function createJob(dir: string, fps = 60): Promise<Job> {
+export async function createJob(dir: string, fps = 24): Promise<Job> {
   await mkdir(dir, { recursive: true })
   const job = { dir, fps }
   await writeFile(path.join(dir, 'job.json'), JSON.stringify({ fps }))
@@ -78,7 +78,7 @@ export async function forEachFrame(
   concurrency: number,
   fn: (inputPath: string, outputPath: string) => Promise<void>
 ): Promise<void> {
-  const frames = (await readdir(inputDir)).filter((f) => f.endsWith('.png')).sort()
+  const frames = (await readdir(inputDir)).filter(isFramePath).sort()
 
   let cursor = 0
   async function worker() {
@@ -96,9 +96,34 @@ export async function forEachFrame(
 
 /** Path to the first (lowest-numbered) frame in a frame directory. */
 export async function firstFrame(dir: string): Promise<string> {
-  const frames = (await readdir(dir)).filter((f) => f.endsWith('.png')).sort()
+  const frames = await listFrames(dir)
   if (frames.length === 0) throw new Error(`No frames found in ${dir}`)
   return path.join(dir, frames[0])
+}
+
+/** Sorted list of frame filenames (not full paths) in a frame directory. */
+export async function listFrames(dir: string): Promise<string[]> {
+  return (await readdir(dir)).filter(isFramePath).sort()
+}
+
+function isFramePath(f: string): boolean {
+  return f.endsWith('.png') || f.endsWith('.jpg')
+}
+
+/**
+ * Resolves the frame in `siblingDir` matching `inputPath`'s frame number,
+ * regardless of extension. Different frame directories can use different
+ * formats now (alpha masks stay lossless PNG while photographic frames are
+ * lossy JPEG for size), so a sibling frame isn't guaranteed to share
+ * `inputPath`'s extension the way it shares its frame number.
+ */
+export async function siblingFramePath(inputPath: string, siblingDir: string): Promise<string> {
+  const base = path.basename(inputPath, path.extname(inputPath))
+  for (const ext of ['png', 'jpg']) {
+    const candidate = path.join(siblingDir, `${base}.${ext}`)
+    if (await exists(candidate)) return candidate
+  }
+  throw new Error(`No matching frame for "${base}" in ${siblingDir}`)
 }
 
 export async function exists(p: string): Promise<boolean> {
@@ -116,21 +141,24 @@ export async function hasFiles(dir: string): Promise<boolean> {
   return (await readdir(dir)).length > 0
 }
 
-/** Extracts `videoPath` into `<outputDir>/0001.png`, `0002.png`, ... at `fps`. */
+/**
+ * Extracts `videoPath` into `<outputDir>/0001.<ext>`, `0002.<ext>`, ... at
+ * `fps`. `ext: 'jpg'` is used for frames that are large, photographic, and
+ * either terminal or tolerant of recompression (source); lossless `png`
+ * (the default) is for anything that needs exact pixel values preserved,
+ * like alpha mattes.
+ */
 export async function extractFrames(
   sourceVideoPath: string,
   outputDir: string,
-  fps: number
+  fps: number,
+  ext: 'png' | 'jpg' = 'png'
 ): Promise<void> {
   await mkdir(outputDir, { recursive: true })
-  await execFileAsync('ffmpeg', [
-    '-y',
-    '-i',
-    sourceVideoPath,
-    '-r',
-    String(fps),
-    path.join(outputDir, '%04d.png'),
-  ])
+  const args = ['-y', '-i', sourceVideoPath, '-r', String(fps)]
+  if (ext === 'jpg') args.push('-q:v', '2')
+  args.push(path.join(outputDir, `%04d.${ext}`))
+  await execFileAsync('ffmpeg', args)
 }
 
 /**
@@ -143,14 +171,14 @@ export async function extractFrames(
 export async function compileFramesToVideo(
   inputFramesDir: string,
   outputVideoPath: string,
-  opts: { fps: number; scale?: string; crf?: number }
+  opts: { fps: number; scale?: string; crf?: number; ext?: 'png' | 'jpg' }
 ): Promise<void> {
   const args = [
     '-y',
     '-framerate',
     String(opts.fps),
     '-i',
-    path.join(inputFramesDir, '%04d.png'),
+    path.join(inputFramesDir, `%04d.${opts.ext ?? 'png'}`),
     '-c:v',
     'libx264',
     '-pix_fmt',

@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import Replicate from 'replicate'
+import sharp from 'sharp'
 
 let client: Replicate | undefined
 
@@ -35,20 +36,34 @@ type FileOutputLike = { blob: () => Promise<Blob> }
 
 /**
  * Runs a model that returns a single file output (image or video) and
- * writes it to `outputPath`.
+ * writes it to `outputPath`. Pass `jpegQuality` to re-encode the result as
+ * JPEG before writing — most image models here only return PNG (or don't
+ * expose a format choice at all), so re-encoding locally via `sharp` is
+ * the one place that controls on-disk size/format, rather than depending
+ * on each model's own (inconsistent) output-format support.
  */
 export async function runModelToFile(
   identifier: `${string}/${string}` | `${string}/${string}:${string}`,
   input: Record<string, unknown>,
-  outputPath: string
+  outputPath: string,
+  opts?: { jpegQuality?: number }
 ): Promise<void> {
   const output = await runModel<FileOutputLike>(identifier, input)
-  await saveFileOutput(output, outputPath)
+  await saveFileOutput(output, outputPath, opts)
 }
 
-async function saveFileOutput(output: FileOutputLike, outputPath: string): Promise<void> {
+async function saveFileOutput(
+  output: FileOutputLike,
+  outputPath: string,
+  opts?: { jpegQuality?: number }
+): Promise<void> {
   const blob = await output.blob()
-  await writeFile(outputPath, Buffer.from(await blob.arrayBuffer()))
+  const buffer = Buffer.from(await blob.arrayBuffer())
+  if (opts?.jpegQuality) {
+    await sharp(buffer).jpeg({ quality: opts.jpegQuality }).toFile(outputPath)
+  } else {
+    await writeFile(outputPath, buffer)
+  }
 }
 
 /**

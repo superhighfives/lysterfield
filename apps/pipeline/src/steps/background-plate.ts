@@ -1,52 +1,48 @@
-import { execFile } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { promisify } from 'node:util'
-import { forEachFrame, framesDir, type Job } from '../job.ts'
+import { forEachFrame, framesDir, siblingFramePath, type Job } from '../job.ts'
+import { reshapeMask } from '../mask.ts'
 import { MODELS } from '../models.ts'
 import { readFileAsInput, runModelToFile } from '../replicate.ts'
-
-const execFileAsync = promisify(execFile)
 
 export interface BackgroundPlateResult {
   /** Per-frame stills with the subject erased. */
   plateFramesDir: string
 }
 
+/**
+ * Softened from an earlier version that explicitly asked for "a lone tree"
+ * — that produced a crisp, hard-shadowed focal tree that was the single
+ * biggest source of visible per-frame identity flicker on real footage (see
+ * plans/in-progress/panel-3-background-flicker-mitigation.md). Comparing
+ * against the legacy pipeline's own background plates showed the real fix
+ * isn't "no tree" specifically, it's an overall softer, more abstract style
+ * with no crisp edges anywhere — nothing sharp enough to read as
+ * "identity-shifted" between frames. A 3-frame test confirmed this prompt
+ * plus a lower `guidance` (see the call site below) reliably drops the
+ * discrete-tree problem as a side effect, without a separate negative
+ * prompt (flux-fill-pro's schema doesn't have one).
+ */
 const FILL_PROMPT =
-  'open grass field with wildflowers, a lone tree, and trees in the far distance, natural continuation of the surrounding meadow, photorealistic'
+  'soft hazy meadow, loose abstract watercolor wash, indistinct diffuse brushstrokes, no sharp edges or defined objects, muted washed-out palette, dreamlike atmospheric blur, natural continuation of the surrounding field'
 
 /**
- * Growing/feathering the mask well past the matte's precise silhouette.
- * flux-fill-pro at max guidance still reconstructed a person on ~30% of a
- * 20-frame sample (see models.ts) when given the exact person-shaped alpha
- * mask — the shape itself, not just prompt weight, was pulling the model
- * toward "there's a person here". A same-model retest on those exact
- * failure frames plus 8 fresh ones (11/11 clean) confirmed a heavily
- * dilated + blurred mask — which no longer reads as a person silhouette —
- * removes that pull. Two alternatives were tried and rejected: an
- * SDXL-inpainting hybrid primed with LaMa's fill regenerated the same
+ * Mask reshaping itself (dilate + blur, `reshapeMask` in `../mask.ts`) is
+ * what stops flux-fill-pro reconstructing a person: at max guidance it did
+ * so on ~30% of a 20-frame sample (see models.ts) when given the exact
+ * person-shaped alpha mask — the shape itself, not just prompt weight, was
+ * pulling the model toward "there's a person here". A same-model retest on
+ * those exact failure frames plus 8 fresh ones (11/11 clean) confirmed the
+ * heavily dilated + blurred mask, which no longer reads as a person
+ * silhouette, removes that pull. Two alternatives were tried and rejected:
+ * an SDXL-inpainting hybrid primed with LaMa's fill regenerated the same
  * ghost-person artifact (LaMa's own silhouette-shaped shading was enough
  * of a shape cue), and negative-prompt suppression alone (no reshaping)
  * avoided people but was visibly less temporally consistent frame-to-frame
  * (tree size/color varying more) and produced at least one off-palette
  * result (a purple-blossomed tree).
  */
-const MASK_DILATION_PASSES = 100
-const MASK_BLUR_SIGMA = 30
-
-async function reshapeMask(alphaPath: string, outputPath: string): Promise<void> {
-  const dilations = Array(MASK_DILATION_PASSES).fill('dilation').join(',')
-  await execFileAsync('ffmpeg', [
-    '-y',
-    '-i',
-    alphaPath,
-    '-vf',
-    `format=gray,${dilations},gblur=sigma=${MASK_BLUR_SIGMA}`,
-    outputPath,
-  ])
-}
 
 /**
  * With no seed, flux-fill-pro's per-frame independence showed up as real
@@ -82,22 +78,48 @@ function seedForJob(job: Job): number {
  * over the subject instead of continuing the meadow — see `models.ts` for
  * the side-by-side that replaced it with prompt-guided flux-fill-pro,
  * `reshapeMask` above for why the mask itself also needed reshaping, and
- * `seedForJob` below for the frame-to-frame flicker fix.
+ * `seedForJob` below for the frame-to-frame flicker fix within this step.
+ *
+ * Originally ran on the raw *source* frames, with panel 3 built by running
+ * `artwork()` again on this step's output (erase, then stylize). On real
+ * footage that produced severe frame-to-frame flicker — DiffusionCLIP is
+ * genuinely deterministic (confirmed by re-running it on identical input),
+ * but small, visually-negligible per-frame differences in flux-fill-pro's
+ * *generated* fill texture got chaotically amplified into large, visible
+ * instability (a whole tree appearing/disappearing between frames). Neither
+ * piece was unstable on its own — flux-fill-pro's raw fill was stable
+ * frame-to-frame, and DiffusionCLIP was equally stable on real photographic
+ * source (panel 2) — the instability was specific to DiffusionCLIP
+ * processing flux-fill-pro's synthetic content.
+ *
+ * Fix: run this step *after* styling instead of before, on panel 2's
+ * already-generated, already-stable `artwork-upscaled` frames — confirmed
+ * to fix the flicker in a side-by-side test. This also means panel 3 no
+ * longer needs its own `artwork()`/`upscale()` calls at all: fed an
+ * already-1024px input, flux-fill-pro's own output lands at 1024px too,
+ * exactly `compose.ts`'s `PANEL_SIZE`, so this step's output is panel 3's
+ * final frames directly.
  */
 export async function backgroundPlate(
   job: Job,
-  sourceFramesDir: string,
+  inputFramesDir: string,
   alphaFramesDir: string,
+  outputName: string,
   concurrency: number
 ): Promise<BackgroundPlateResult> {
-  const plateFramesDir = await framesDir(job, 'background-plate')
+  const plateFramesDir = await framesDir(job, outputName)
   const maskTmpDir = await mkdtemp(path.join(tmpdir(), 'lysterfield-background-plate-mask-'))
   const seed = seedForJob(job)
 
   try {
-    await forEachFrame(sourceFramesDir, plateFramesDir, concurrency, async (inputPath, outputPath) => {
-      const alphaPath = path.join(alphaFramesDir, path.basename(inputPath))
-      const reshapedMaskPath = path.join(maskTmpDir, path.basename(inputPath))
+    await forEachFrame(inputFramesDir, plateFramesDir, concurrency, async (inputPath, outputPath) => {
+      const alphaPath = await siblingFramePath(inputPath, alphaFramesDir)
+      const frameBase = path.basename(inputPath, path.extname(inputPath))
+      // Always PNG regardless of the source frame's format — this is a
+      // freshly-generated temp mask (not a lookup), immediately fed to
+      // flux-fill-pro and deleted, so there's no size benefit to making it
+      // lossy and every reason to keep its blurred gradient exact.
+      const reshapedMaskPath = path.join(maskTmpDir, `${frameBase}.png`)
       await reshapeMask(alphaPath, reshapedMaskPath)
 
       await runModelToFile(
@@ -106,13 +128,15 @@ export async function backgroundPlate(
           image: await readFileAsInput(inputPath),
           mask: await readFileAsInput(reshapedMaskPath),
           prompt: FILL_PROMPT,
-          guidance: 100,
+          // Lower than flux-fill-pro's max (100) on purpose — less strict
+          // prompt adherence gives the model room to actually be loose/
+          // abstract instead of defaulting to a crisp, detailed object. See
+          // FILL_PROMPT's comment above.
+          guidance: 35,
           seed,
-          // flux-fill-pro defaults to jpg — force png so the bytes actually
-          // match the .png extension forEachFrame/ffmpeg expect downstream.
-          output_format: 'png',
         },
-        outputPath
+        outputPath,
+        { jpegQuality: 90 }
       )
     })
   } finally {
