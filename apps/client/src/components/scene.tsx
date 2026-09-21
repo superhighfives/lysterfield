@@ -142,11 +142,12 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
             contribute almost nothing, leaving the polaroid frames lit by
             flat ambient only (gray/washed out) instead of this light's
             highlights. decay={0} restores the old flat, distance-independent
-            falloff this scene was tuned for. */}
+            falloff this scene was tuned for; intensity bumped to 2 on top of
+            that to bring the frames back up to a proper bright white. */}
         <primitive
           object={spotlight}
           position={[5, 0, 30]}
-          intensity={1}
+          intensity={2}
           decay={0}
           castShadow
           shadow-bias={-0.01}
