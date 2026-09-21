@@ -1,8 +1,6 @@
 'use strict'
 
 import fs from 'fs'
-import lodash from 'lodash'
-const { find } = lodash
 
 const getDirectories = (source) =>
   fs
@@ -28,9 +26,9 @@ if (dreams.length === 0 && existingDreams.length > 0) {
 const dreamsOutput = dreams
   .filter((dream) => dream != 'archive')
   .map((dream) => {
-    const existingDream = find(existingDreams, { id: dream })
+    const existingDream = existingDreams.find((d) => d.id === dream)
     if (existingDream) {
-      return find(existingDreams, { id: dream })
+      return existingDream
     } else {
       return {
         id: dream,

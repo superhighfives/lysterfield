@@ -214,7 +214,6 @@ function Choose(props: ThreeElements['group']) {
                     e.stopPropagation()
                     setHover(false)
                   }}
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   onClick={(e) => handleClick(e as any, dream)}
                   passthroughMaterial={
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment

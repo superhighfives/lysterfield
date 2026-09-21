@@ -1,5 +1,11 @@
 import { DeviceOrientationControlsProps } from '@react-three/drei'
-import { Euler, Quaternion, Vector3, MathUtils } from 'three'
+import {
+  Euler,
+  Event as ThreeEvent,
+  Quaternion,
+  Vector3,
+  MathUtils,
+} from 'three'
 
 export const isVideoPlaying = (video: HTMLVideoElement) =>
   !!(
@@ -104,25 +110,19 @@ export const setObjectQuaternion = (() => {
   }
 })()
 
-/**
- * Hashes the given string using a simple shifting hash algorithm.
- *
- * @param str - The string to hash
- * @returns The hashed string as base 36
- */
-export const hash = (str: string) => {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = (hash << 5) - hash + char
-    hash &= hash
+/** Fisher-Yates shuffle — returns a new array, doesn't mutate the input. */
+export function shuffle<T>(items: T[]): T[] {
+  const result = [...items]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
   }
 
-  return new Uint32Array([hash])[0].toString(36)
+  return result
 }
 
 export const getRotation = (
-  e?: THREE.Event,
+  e?: ThreeEvent,
   initialRotation?: [number, number, number]
 ) => {
   if (!e) return

@@ -1,5 +1,5 @@
 import { shaderMaterial } from '@react-three/drei'
-import { extend, MaterialNode } from '@react-three/fiber'
+import { extend, ThreeElement } from '@react-three/fiber'
 import { ShaderMaterial, Texture, Vector2 } from 'three'
 
 const uniforms = {
@@ -53,10 +53,7 @@ export type PolaroidMaterialProps = ShaderMaterial & typeof uniforms
 
 declare module '@react-three/fiber' {
   interface ThreeElements {
-    polaroidMaterial: MaterialNode<
-      PolaroidMaterialProps,
-      typeof PolaroidMaterial
-    >
+    polaroidMaterial: ThreeElement<typeof PolaroidMaterial>
   }
 }
 

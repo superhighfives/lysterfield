@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { MediaReadyState } from '@react-av/core'
 import { Dream } from './utils/types'
 import { Vector2 } from 'three'
 
@@ -8,7 +7,8 @@ export interface AppState {
   resetting: boolean
   seeking: boolean
   collection: Dream[]
-  videoState: MediaReadyState
+  /** Mirrors the native HTMLMediaElement.readyState scale (0=HAVE_NOTHING .. 4=HAVE_ENOUGH_DATA). */
+  videoState: number
   videoPlaying: boolean
   isMobile: boolean
   isTouch: boolean
@@ -23,7 +23,7 @@ export interface AppState {
   setResetting: (resetting: boolean) => void
   setSeeking: (seeking: boolean) => void
   setCollection: (collection: Dream[]) => void
-  setVideoState: (videoState: MediaReadyState) => void
+  setVideoState: (videoState: number) => void
   setVideoPlaying: (videoPlaying: boolean) => void
   setShowPlayhead: (showPlayhead: boolean) => void
   setIsMobile: (isMobile: boolean) => void
@@ -41,7 +41,7 @@ export const useStore = create<AppState>()((set) => ({
   resetting: false,
   seeking: false,
   collection: [],
-  videoState: MediaReadyState.HAVE_NOTHING,
+  videoState: HTMLMediaElement.HAVE_NOTHING,
   videoPlaying: false,
   isMobile: false,
   isTouch: false,
@@ -54,7 +54,7 @@ export const useStore = create<AppState>()((set) => ({
   isTooSlow: false,
   setDream: (dream: Dream | null) => set({ dream }),
   setResetting: (resetting: boolean) => {
-    set(() => ({ resetting: resetting }))
+    set(() => ({ resetting }))
     if (resetting) {
       setTimeout(() => {
         set(() => ({ dream: null }))
@@ -63,22 +63,19 @@ export const useStore = create<AppState>()((set) => ({
     }
   },
   setCollection: (collection: Dream[]) => set({ collection }),
-  setVideoState: (videoState) => set(() => ({ videoState: videoState })),
-  setShowPlayhead: (showPlayhead: boolean) =>
-    set(() => ({ showPlayhead: showPlayhead })),
-  setVideoPlaying: (videoPlaying: boolean) =>
-    set(() => ({ videoPlaying: videoPlaying })),
-  setIsMobile: (isMobile: boolean) => set(() => ({ isMobile: isMobile })),
-  setIsTouch: (isTouch: boolean) => set(() => ({ isTouch: isTouch })),
+  setVideoState: (videoState) => set(() => ({ videoState })),
+  setShowPlayhead: (showPlayhead: boolean) => set(() => ({ showPlayhead })),
+  setVideoPlaying: (videoPlaying: boolean) => set(() => ({ videoPlaying })),
+  setIsMobile: (isMobile: boolean) => set(() => ({ isMobile })),
+  setIsTouch: (isTouch: boolean) => set(() => ({ isTouch })),
   setPolaroidVisible: (polaroidVisible: number) =>
-    set(() => ({ polaroidVisible: polaroidVisible })),
+    set(() => ({ polaroidVisible })),
   setInitialRotation: (initialRotation: [number, number, number]) =>
-    set(() => ({ initialRotation: initialRotation })),
+    set(() => ({ initialRotation })),
   setResetInitialRotation: (resetInitialRotation: boolean) =>
-    set(() => ({ resetInitialRotation: resetInitialRotation })),
-  setGlobalPointer: (globalPointer: Vector2) =>
-    set(() => ({ globalPointer: globalPointer })),
-  setReady: (ready: boolean) => set(() => ({ ready: ready })),
-  setIsTooSlow: (isTooSlow: boolean) => set(() => ({ isTooSlow: isTooSlow })),
-  setSeeking: (seeking: boolean) => set(() => ({ seeking: seeking })),
+    set(() => ({ resetInitialRotation })),
+  setGlobalPointer: (globalPointer: Vector2) => set(() => ({ globalPointer })),
+  setReady: (ready: boolean) => set(() => ({ ready })),
+  setIsTooSlow: (isTooSlow: boolean) => set(() => ({ isTooSlow })),
+  setSeeking: (seeking: boolean) => set(() => ({ seeking })),
 }))

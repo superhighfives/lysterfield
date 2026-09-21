@@ -1,6 +1,6 @@
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
-import { RefObject, useEffect, useRef, useState } from 'react'
-import { VideoMaterial } from '../materials/video-material'
+import { RefObject, useEffect, useRef } from 'react'
+import { VideoMaterial, VideoMaterialProps } from '../materials/video-material'
 import Polaroid from '../models/polaroid'
 import { isVideoPlaying } from '../utils'
 import {
@@ -16,11 +16,12 @@ import { suspend } from 'suspend-react'
 import { useIntersect } from '@react-three/drei'
 import { useStore } from '../store'
 import { animated, config, useSpring } from '@react-spring/three'
+// eslint-disable-next-line import/named -- useIdle is a real export (confirmed at runtime); eslint-plugin-import's static resolver doesn't handle this package's minimal `exports` map correctly
 import { useIdle } from '@uidotdev/usehooks'
 
 function Main(
   props: ThreeElements['group'] & {
-    video: RefObject<HTMLVideoElement>
+    video: RefObject<HTMLVideoElement | null>
     tilt: number[]
   }
 ) {
@@ -47,9 +48,6 @@ function Main(
     }
   }, [dream])
 
-  const [pointerPos, setPointerPos] = useState(new Vector2(0, 0))
-  const [pointerRel, setPointerRel] = useState(new Vector2(0, 0))
-
   const gl = useThree((state) => state.gl)
 
   const texture = suspend(
@@ -65,27 +63,53 @@ function Main(
         }
       }),
     [videoElement]
-  ) as THREE.VideoTexture
+  ) as VideoTexture
 
   // Update colorspace
   texture.colorSpace = LinearSRGBColorSpace
 
-  const [time, setTime] = useState(0)
   const idle = useIdle(5000)
 
-  const [scaleProgress, setScaleProgress] = useState(0)
-  const [idleOpacity, setIdleOpacity] = useState(0)
-  const [polaroidVisibility, setPolaroidVisibility] = useState(0)
+  const polaroidMaterial = useRef<VideoMaterialProps>(null)
+  const avatarMaterial = useRef<VideoMaterialProps>(null)
+  const lyricsMaterial = useRef<VideoMaterialProps>(null)
+
+  // time/pointer/scale/idle/polaroid-visibility all used to be React state
+  // set every frame from useFrame — since every consumer is either a shader
+  // uniform (settable directly on the material ref below) or a react-spring
+  // target (settable via its imperative `.start()` api), driving them
+  // through React state was re-rendering this whole component (Polaroid,
+  // the 500x500-subdivision Avatar plane, the lyrics mesh, three useSpring
+  // calls) 60x/sec for no reason. Plain refs carry the same values across
+  // frames without triggering React at all.
+  const timeRef = useRef(0)
+  const idleOpacityRef = useRef(0)
+  const polaroidVisibilityRef = useRef(0)
+
+  const [{ scale }, scaleApi] = useSpring(() => ({
+    scale: 0,
+    config: config.molasses,
+  }))
+  const { position } = useSpring({
+    position: [0, 0.04, -0.85],
+  })
+
+  const { height: h } = useThree((state) => state.viewport)
+
+  const [{ position: polaroidPosition }, polaroidApi] = useSpring(() => ({
+    position: [0, -h * 1.6, 0],
+    config: { precision: 0.0001, ...config.molasses },
+  }))
 
   useFrame((state, delta) => {
     const video = texture.source.data
     const isPlaying = isVideoPlaying(video)
 
-    setTime(
-      isPlaying && Math.abs(time - video.currentTime) < 1
-        ? time + delta
+    const time =
+      isPlaying && Math.abs(timeRef.current - video.currentTime) < 1
+        ? timeRef.current + delta
         : video.currentTime
-    )
+    timeRef.current = time
 
     let pointerX = 0
     let pointerY = 0
@@ -106,9 +130,18 @@ function Main(
       pointerY * state.size.height
     )
     const pointerRelative = new Vector2(pointerX, pointerY)
-    setPointerPos(pointerPosition)
-    setPointerRel(pointerRelative)
     setGlobalPointer(pointerRelative)
+
+    for (const material of [
+      polaroidMaterial.current,
+      avatarMaterial.current,
+      lyricsMaterial.current,
+    ]) {
+      if (!material) continue
+      material.uTime = time
+      material.uPointerPos = pointerPosition
+      material.uPointerRelative = pointerRelative
+    }
 
     const polaroidRef = main.current?.getObjectByName('polaroid')
     if (polaroidRef) {
@@ -138,36 +171,27 @@ function Main(
       )
     }
 
-    setPolaroidVisibility(
-      MathUtils.lerp(polaroidVisibility, !dream || resetting ? 2 : 0, 0.1)
+    polaroidVisibilityRef.current = MathUtils.lerp(
+      polaroidVisibilityRef.current,
+      !dream || resetting ? 2 : 0,
+      0.1
     )
+    polaroidApi.start({
+      position: [0, polaroidVisibilityRef.current * -h * 1.6, 0],
+    })
 
-    setScaleProgress(MathUtils.clamp(time / 8.0, 1.05, 1.125))
+    scaleApi.start({ scale: MathUtils.clamp(time / 8.0, 1.05, 1.125) })
 
     if (!isMobile && !isTouch) {
-      setIdleOpacity(
-        MathUtils.lerp(
-          idleOpacity,
-          idle && video.currentTime > 15 ? 1.0 : 0.0,
-          0.05
-        )
+      idleOpacityRef.current = MathUtils.lerp(
+        idleOpacityRef.current,
+        idle && video.currentTime > 15 ? 1.0 : 0.0,
+        0.05
       )
+      if (avatarMaterial.current) {
+        avatarMaterial.current.uIdle = idleOpacityRef.current
+      }
     }
-  })
-
-  const { height: h } = useThree((state) => state.viewport)
-
-  const { position: polaroidPosition } = useSpring({
-    from: { position: [0, -h * 1.6, 0] },
-    to: {
-      position: [0, polaroidVisibility * -h * 1.6, 0],
-    },
-    config: { precision: 0.0001, ...config.molasses },
-  })
-
-  const { scale } = useSpring({ scale: scaleProgress, config: config.molasses })
-  const { position } = useSpring({
-    position: [0, 0.04, -0.85],
   })
 
   return (
@@ -184,6 +208,7 @@ function Main(
           scale={0.35}
           passthroughMaterial={
             <videoMaterial
+              ref={polaroidMaterial}
               key={VideoMaterial.key}
               uTexture={texture}
               uFrameSelected={7}
@@ -191,9 +216,6 @@ function Main(
               uFrameMask={3}
               uOpacity={1}
               uFrameOverlay={3}
-              uPointerPos={pointerPos}
-              uPointerRelative={pointerRel}
-              uTime={time}
             />
           }
         />
@@ -206,6 +228,7 @@ function Main(
         >
           <planeGeometry args={[1, 1, 500, 500]} />
           <videoMaterial
+            ref={avatarMaterial}
             key={VideoMaterial.key}
             uTexture={texture}
             uFrameSelected={2}
@@ -216,10 +239,6 @@ function Main(
             uAvatar={1}
             uOpacity={1}
             uMaskIntensity={1}
-            uPointerPos={pointerPos}
-            uPointerRelative={pointerRel}
-            uTime={time}
-            uIdle={idleOpacity}
           />
         </animated.mesh>
 
@@ -227,6 +246,7 @@ function Main(
         <mesh position={[0, -0.4, 0.1]}>
           <planeGeometry args={[1, 1, 1]} />
           <videoMaterial
+            ref={lyricsMaterial}
             key={VideoMaterial.key}
             uTexture={texture}
             uFrameSelected={7}
@@ -235,7 +255,6 @@ function Main(
             uFrameTotal={7}
             uInvert={1}
             uOpacity={1}
-            uTime={time}
           />
         </mesh>
       </animated.group>

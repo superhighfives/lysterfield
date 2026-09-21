@@ -1,4 +1,10 @@
-import { MutableRefObject, useCallback, useRef, useState } from 'react'
+import {
+  MutableRefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Euler, MathUtils, Vector3 } from 'three'
 import { useCursor, Center } from '@react-three/drei'
@@ -77,13 +83,18 @@ export default function Slider({
   )
 
   const [initalisedVisuals, setInitalisedVisuals] = useState(false)
-  if (!initalisedVisuals) {
-    // Surely there's a better way?
-    setTimeout(() => {
+  useEffect(() => {
+    if (initalisedVisuals) return
+    // Calling this during render (rather than here) used to work, but is a
+    // real violation of React's rules — React 19 renders components twice
+    // in a row to catch exactly this, and it was scheduling duplicate
+    // overlapping timeouts as a result.
+    const timeout = setTimeout(() => {
       runSprings(Math.random() * 1000, 0)
       setInitalisedVisuals(true)
     })
-  }
+    return () => clearTimeout(timeout)
+  }, [initalisedVisuals, runSprings])
 
   const wheelOffset = useRef(0)
   const dragOffset = useRef(0)

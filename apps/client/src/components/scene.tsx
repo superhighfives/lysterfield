@@ -1,5 +1,6 @@
 import { RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Event as ThreeEvent,
   MathUtils,
   PerspectiveCamera as PerspectiveCameraType,
   SpotLight,
@@ -17,10 +18,9 @@ import Main from '../views/main'
 import { useFrame, useThree } from '@react-three/fiber'
 import { getRotation } from '../utils'
 import { useStore } from '../store'
-import { MediaReadyState } from '@react-av/core'
 
-function Scene({ video }: { video: RefObject<HTMLVideoElement> }) {
-  const camera = useRef<PerspectiveCameraType>()
+function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
+  const camera = useRef<PerspectiveCameraType>(null)
   const { viewport } = useThree((state) => state)
   const { width: w, height: h } = viewport
   const CAMERA_Z = 1.5
@@ -52,7 +52,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement> }) {
   useFrame((state, delta) => {
     const cameraRef = camera.current
 
-    if (videoState < MediaReadyState.HAVE_FUTURE_DATA) {
+    if (videoState < HTMLMediaElement.HAVE_FUTURE_DATA) {
       setBufferingDelay(bufferingDelay + delta)
 
       if (bufferingDelay >= 8 && !isTooSlow) {
@@ -92,7 +92,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement> }) {
 
   const [rotation, setRotation] = useState([0, 0, 0])
 
-  const onOrientationChange = (e?: THREE.Event) => {
+  const onOrientationChange = (e?: ThreeEvent) => {
     if (resetInitialRotation) {
       const r = getRotation(e, [0, 0, 0])
       setInitialRotation(r as [number, number, number])

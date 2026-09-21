@@ -3,13 +3,13 @@ import {
   HTMLProps,
   MutableRefObject,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import { useStore } from '../store'
 import {
   Play,
   Pause,
-  Spinner,
   SpeakerSimpleX,
   SpeakerSimpleNone,
   SpeakerSimpleLow,
@@ -18,36 +18,15 @@ import {
 } from '@phosphor-icons/react'
 import Tooltip from '../views/tooltip'
 
-import * as Media from '@react-av/core'
 import {
-  Mute,
-  PlayPause,
-  Timestamp,
-  toTimestampString,
-} from '@react-av/controls'
-import * as Slider from '@radix-ui/react-slider'
-import {
-  ProgressBarRoot,
-  ProgressBarBufferedRanges,
-  ProgressBarTooltip,
-  useMediaProgressBarTooltip,
-} from '@react-av/sliders'
+  MediaController,
+  MediaPlayButton,
+  MediaMuteButton,
+  MediaTimeDisplay,
+  MediaTimeRange,
+  MediaPreviewTimeDisplay,
+} from 'media-chrome/react'
 import Footer from '../views/footer'
-
-function StyledProgressBarTooltip() {
-  const { percentage } = useMediaProgressBarTooltip()
-  const duration = Media.useMediaDuration()
-
-  return (
-    <ProgressBarTooltip
-      className="text-gray-400 font-mono transition opacity-0 bg-white text-xs px-2 rounded-full absolute -translate-x-1/2 -translate-y-[calc(50%_+_24px)] tracking-wider pointer-events-none"
-      position="center"
-      showingClassName="opacity-100"
-    >
-      {toTimestampString(duration * percentage, duration >= 3600)}
-    </ProgressBarTooltip>
-  )
-}
 
 const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
   (_props, ref) => {
@@ -56,7 +35,6 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const videoPlaying = useStore((state) => state.videoPlaying)
     const isMobile = useStore((state) => state.isMobile)
     const isTouch = useStore((state) => state.isTouch)
-    const globalPointer = useStore((state) => state.globalPointer)
     const [recalibrateMobile, setRecalibrateMobile] = useState(false)
 
     const setResetInitialRotation = useStore(
@@ -65,70 +43,101 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const polaroidVisible = useStore((state) => state.polaroidVisible)
     const setResetting = useStore((state) => state.setResetting)
     const setSeeking = useStore((state) => state.setSeeking)
-
-    function VideoPlayer() {
-      const setVideoPlaying = useStore((state) => state.setVideoPlaying)
-      const setVideoState = useStore((state) => state.setVideoState)
-
-      const mediaReadyState = Media.useMediaReadyState()
-      const [mediaPlaying] = Media.useMediaPlaying()
-      const mediaEnded = Media.useMediaEnded()
-      const mediaSeeking = Media.useMediaSeeking()
-
-      useEffect(() => {
-        setVideoState(mediaReadyState)
-      }, [mediaReadyState])
-
-      useEffect(() => {
-        setSeeking(mediaSeeking)
-      }, [mediaSeeking])
-
-      useEffect(() => {
-        if (mediaEnded) {
-          setResetting(true)
-        }
-      }, [mediaEnded])
-
-      useEffect(() => {
-        setVideoPlaying(mediaPlaying)
-      }, [mediaPlaying])
-
-      return null
-    }
+    const setVideoPlaying = useStore((state) => state.setVideoPlaying)
+    const setVideoState = useStore((state) => state.setVideoState)
 
     useEffect(() => {
       ;(ref as MutableRefObject<HTMLVideoElement>).current.load()
     }, [dream])
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [testTimeout, setTestTimeout] = useState<any>(null)
-
+    // Syncs native <video> playback state into the store directly, rather
+    // than through whichever library renders the visible controls — this
+    // logic used to depend on @react-av's hooks; the native events it wraps
+    // are the same ones every browser already fires, so reading them
+    // directly means a future controls-library swap won't touch this again.
     useEffect(() => {
-      if (
-        (globalPointer.x <= 0.33 ||
+      const el = (ref as MutableRefObject<HTMLVideoElement>).current
+      if (!el) return
+
+      const updateReadyState = () => setVideoState(el.readyState)
+      const handlePlaying = () => setVideoPlaying(true)
+      const handlePause = () => setVideoPlaying(false)
+      const handleEnded = () => setResetting(true)
+      const handleSeeking = () => setSeeking(true)
+      const handleSeeked = () => setSeeking(false)
+
+      const readyStateEvents = [
+        'loadedmetadata',
+        'loadeddata',
+        'canplay',
+        'canplaythrough',
+        'waiting',
+        'stalled',
+        'emptied',
+      ]
+      readyStateEvents.forEach((event) =>
+        el.addEventListener(event, updateReadyState)
+      )
+      el.addEventListener('playing', handlePlaying)
+      el.addEventListener('pause', handlePause)
+      el.addEventListener('ended', handleEnded)
+      el.addEventListener('seeking', handleSeeking)
+      el.addEventListener('seeked', handleSeeked)
+
+      updateReadyState()
+
+      return () => {
+        readyStateEvents.forEach((event) =>
+          el.removeEventListener(event, updateReadyState)
+        )
+        el.removeEventListener('playing', handlePlaying)
+        el.removeEventListener('pause', handlePause)
+        el.removeEventListener('ended', handleEnded)
+        el.removeEventListener('seeking', handleSeeking)
+        el.removeEventListener('seeked', handleSeeked)
+      }
+    }, [])
+
+    const recalibrateTimeout = useRef<ReturnType<typeof setTimeout> | null>(
+      null
+    )
+
+    // Watches only `globalPointer` via a direct store subscription instead
+    // of `useStore((state) => state.globalPointer)` — that field updates
+    // every animation frame (see main.tsx), and a reactive subscription to
+    // it re-rendered this entire control bar 60x/sec for a check that only
+    // ever changes outcome a few times per session.
+    useEffect(() => {
+      const unsubscribe = useStore.subscribe((state, prevState) => {
+        if (state.globalPointer === prevState.globalPointer) return
+        const globalPointer = state.globalPointer
+
+        const offCenter =
+          globalPointer.x <= 0.33 ||
           globalPointer.x >= 1.67 ||
           globalPointer.y <= 0.33 ||
-          globalPointer.y >= 1.67) &&
-        isMobile
-      ) {
-        if (!recalibrateMobile) {
-          if (!testTimeout) {
-            console.log('setting timeout')
-            setTestTimeout(setTimeout(() => setRecalibrateMobile(true), 3000))
+          globalPointer.y >= 1.67
+
+        if (offCenter && isMobile) {
+          if (!recalibrateMobile && !recalibrateTimeout.current) {
+            recalibrateTimeout.current = setTimeout(
+              () => setRecalibrateMobile(true),
+              3000
+            )
+          }
+        } else {
+          if (recalibrateTimeout.current) {
+            clearTimeout(recalibrateTimeout.current)
+            recalibrateTimeout.current = null
+          }
+
+          if (recalibrateMobile) {
+            setRecalibrateMobile(false)
           }
         }
-      } else {
-        if (testTimeout) {
-          console.log('clearing timeout')
-          clearTimeout(testTimeout)
-          setTestTimeout(null)
-        }
-
-        if (recalibrateMobile) {
-          setRecalibrateMobile(false)
-        }
-      }
-    }, [globalPointer])
+      })
+      return unsubscribe
+    }, [isMobile, recalibrateMobile])
 
     return (
       <>
@@ -154,84 +163,80 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               : 'pointer-events-none opacity-0'
           }`}
         >
-          <Media.Root>
-            <Media.Container>
-              <Media.Video
-                ref={ref}
-                muted={
-                  location.hostname === 'localhost' ||
-                  location.hostname === '127.0.0.1'
-                }
-                className="hidden"
-                preload="auto"
-                playsInline
-                crossOrigin="anonymous"
-              >
-                <source
-                  src={
-                    dream
-                      ? `${import.meta.env.VITE_APP_DREAMS}/${dream!.id}/video${
-                          isMobile || isTouch ? '-small' : ''
-                        }.webm`
-                      : `video/title.webm`
-                  }
-                  type="video/webm"
-                  key={dream ? `${dream!.id}-webm` : 'video-webm'}
-                />
-                <source
-                  src={
-                    dream
-                      ? `${import.meta.env.VITE_APP_DREAMS}/${dream!.id}/video${
-                          isMobile || isTouch ? '-small' : ''
-                        }.mov`
-                      : `video/title.mov`
-                  }
-                  type="video/mp4"
-                  key={dream ? `${dream!.id}-mov` : 'video-mov'}
-                />
-              </Media.Video>
-            </Media.Container>
-            <VideoPlayer />
-            <Media.Viewport
-              className={`flex flex-col xs:flex-row w-[calc(100vw-4rem)] max-w-[400px] left-4 right-4 xs:space-x-3 items-center`}
+          <MediaController className="contents">
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption -- generated video has no dialogue/caption track to provide */}
+            <video
+              slot="media"
+              ref={ref}
+              muted={
+                location.hostname === 'localhost' ||
+                location.hostname === '127.0.0.1'
+              }
+              className="hidden"
+              preload="auto"
+              playsInline
+              crossOrigin="anonymous"
             >
+              <source
+                src={
+                  dream
+                    ? `${import.meta.env.VITE_APP_DREAMS}/${dream!.id}/video${
+                        isMobile || isTouch ? '-small' : ''
+                      }.webm`
+                    : `video/title.webm`
+                }
+                type="video/webm"
+                key={dream ? `${dream!.id}-webm` : 'video-webm'}
+              />
+              <source
+                src={
+                  dream
+                    ? `${import.meta.env.VITE_APP_DREAMS}/${dream!.id}/video${
+                        isMobile || isTouch ? '-small' : ''
+                      }.mov`
+                    : `video/title.mov`
+                }
+                type="video/mp4"
+                key={dream ? `${dream!.id}-mov` : 'video-mov'}
+              />
+            </video>
+            <div className="flex flex-col xs:flex-row w-[calc(100vw-4rem)] max-w-[400px] left-4 right-4 xs:space-x-3 items-center">
               <div className="flex self-stretch justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
                 <Footer />
                 <div className="group flex relative">
-                  <Mute
-                    defaultIconSize={24}
-                    mutedIcon={<SpeakerSimpleX />}
-                    noneIcon={<SpeakerSimpleNone />}
-                    lowIcon={<SpeakerSimpleLow />}
-                    highIcon={<SpeakerSimpleHigh />}
-                    className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2"
-                  />
+                  <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2">
+                    <SpeakerSimpleX slot="off" />
+                    <SpeakerSimpleLow slot="low" />
+                    <SpeakerSimpleNone slot="medium" />
+                    <SpeakerSimpleHigh slot="high" />
+                  </MediaMuteButton>
                   <Tooltip text="Toggle mute" />
                 </div>
                 <div className="group flex relative">
-                  <PlayPause
-                    defaultIconSize={24}
-                    playIcon={<Play />}
-                    pauseIcon={<Pause />}
-                    loadingIcon={<Spinner />}
-                    className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 pr-4 py-2"
-                  />
+                  <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 pr-4 py-2">
+                    <Play slot="play" />
+                    <Pause slot="pause" />
+                  </MediaPlayButton>
                   <Tooltip text={videoPlaying ? 'Pause' : 'Play'} />
                 </div>
               </div>
               <div className="flex w-full gap-2 items-center pl-3 xs:pl-0 pr-3 py-2 ">
-                <Timestamp type="elapsed" className="font-mono text-xs" />
-                <ProgressBarRoot className="grow relative flex items-center select-none touch-none h-4">
-                  <Slider.Track className="relative bg-slate-300/40 grow rounded-full h-2">
-                    <ProgressBarBufferedRanges className="absolute h-full rounded-full bg-slate-300/60" />
-                    <Slider.Range className="absolute h-full rounded-full bg-yellow-400" />
-                  </Slider.Track>
-                  <StyledProgressBarTooltip />
-                  <Slider.Thumb className="block w-4 h-4 rounded-full bg-slate-50 border border-yellow-500 outline-none z-20" />
-                </ProgressBarRoot>
+                <MediaTimeDisplay className="font-mono text-xs" />
+                <MediaTimeRange
+                  className="grow h-4
+                    [&::part(track)]:bg-slate-300/40 [&::part(track)]:rounded-full [&::part(track)]:h-2
+                    [&::part(buffered)]:bg-slate-300/60 [&::part(buffered)]:rounded-full
+                    [&::part(progress)]:bg-yellow-400 [&::part(progress)]:rounded-full
+                    [&::part(thumb)]:bg-slate-50 [&::part(thumb)]:border [&::part(thumb)]:border-yellow-500 [&::part(thumb)]:w-4 [&::part(thumb)]:h-4 [&::part(thumb)]:rounded-full"
+                >
+                  <MediaPreviewTimeDisplay
+                    slot="preview"
+                    className="text-gray-400 font-mono bg-white text-xs px-2 rounded-full tracking-wider pointer-events-none"
+                  />
+                </MediaTimeRange>
               </div>
-            </Media.Viewport>
-          </Media.Root>
+            </div>
+          </MediaController>
         </div>
       </>
     )

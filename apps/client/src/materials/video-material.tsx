@@ -1,5 +1,5 @@
 import { shaderMaterial } from '@react-three/drei'
-import { extend, MaterialNode } from '@react-three/fiber'
+import { extend, ThreeElement } from '@react-three/fiber'
 import { ShaderMaterial, Texture, Vector2 } from 'three'
 
 const uniforms = {
@@ -9,7 +9,6 @@ const uniforms = {
   uFrameMask: 0,
   uFrameTotal: 0,
   uMaskIntensity: 0,
-  uInversion: 0,
   uInvert: 0,
   uFrameDepth: 0,
   uFrameOverlay: 0,
@@ -243,7 +242,7 @@ export type VideoMaterialProps = ShaderMaterial & typeof uniforms
 
 declare module '@react-three/fiber' {
   interface ThreeElements {
-    videoMaterial: MaterialNode<VideoMaterialProps, typeof VideoMaterial>
+    videoMaterial: ThreeElement<typeof VideoMaterial>
   }
 }
 

@@ -2,21 +2,21 @@ import { useGLTF } from '@react-three/drei'
 import { Euler, ThreeElements, Vector3 } from '@react-three/fiber'
 import { forwardRef, JSX, RefObject } from 'react'
 import { GLTF } from 'three-stdlib'
-import { Group, Mesh } from 'three'
+import { Group, Mesh, MeshStandardMaterial } from 'three'
 import { animated } from '@react-spring/three'
 
 type GLTFResult = GLTF & {
   nodes: {
-    Object_3: THREE.Mesh
-    Object_3001: THREE.Mesh
-    Object_4: THREE.Mesh
-    Object_5: THREE.Mesh
+    Object_3: Mesh
+    Object_3001: Mesh
+    Object_4: Mesh
+    Object_5: Mesh
   }
   materials: {
-    Frameblinn2SG: THREE.MeshStandardMaterial
-    ['Material.001']: THREE.MeshStandardMaterial
-    Framelambert79SG: THREE.MeshStandardMaterial
-    initialShadingGroup: THREE.MeshStandardMaterial
+    Frameblinn2SG: MeshStandardMaterial
+    ['Material.001']: MeshStandardMaterial
+    Framelambert79SG: MeshStandardMaterial
+    initialShadingGroup: MeshStandardMaterial
   }
 }
 
@@ -27,7 +27,9 @@ const Polaroid = forwardRef<
     intersectRef?: RefObject<Mesh>
   }
 >((props, ref) => {
-  const { nodes, materials } = useGLTF('/models/polaroid.glb') as GLTFResult
+  const { nodes, materials } = useGLTF(
+    '/models/polaroid.glb'
+  ) as unknown as GLTFResult
   const rotation = [0, 0, 0]
   const position = [0, 0, 0]
   const scale = [1.0, 1.0, 1.0]

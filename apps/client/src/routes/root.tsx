@@ -1,5 +1,4 @@
 import { useStore } from '../store'
-import { MediaReadyState } from '@react-av/core'
 import { Canvas } from '@react-three/fiber'
 import { Preload } from '@react-three/drei'
 import { Suspense, useEffect, useRef, useState } from 'react'
@@ -8,8 +7,7 @@ import Fallback from '../components/fallback'
 import Scene from '../components/scene'
 import Playhead from '../components/playhead'
 import Viewport from '../components/viewport'
-import { handleDeviceOrientationPermissions, isTouchDevice } from '../utils'
-import shuffle from 'lodash/shuffle'
+import { handleDeviceOrientationPermissions, isTouchDevice, shuffle } from '../utils'
 import dreams from '../dreams.json'
 import { Play, FileText, CircleNotch } from '@phosphor-icons/react'
 
@@ -26,7 +24,6 @@ function Root() {
   const [isBuffering, setIsBuffering] = useState(false)
   const isTooSlow = useStore((state) => state.isTooSlow)
   const seeking = useStore((state) => state.seeking)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const showPlayhead = useStore((state) => state.showPlayhead)
 
   useEffect(() => {
@@ -38,7 +35,7 @@ function Root() {
   useEffect(() => {
     console.log(`Video state: ${videoState}`)
     if (dream) {
-      setIsBuffering(videoState < MediaReadyState.HAVE_FUTURE_DATA)
+      setIsBuffering(videoState < HTMLMediaElement.HAVE_FUTURE_DATA)
     } else {
       setIsBuffering(false)
     }
