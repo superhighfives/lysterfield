@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
-import { Euler, MathUtils, Mesh, Vector3 } from 'three'
+import { Euler, MathUtils, Mesh, MeshBasicMaterial, Vector3 } from 'three'
 import type { Dream } from '../utils/types'
 import Polaroid from '../models/polaroid'
 import { PolaroidMaterial } from '../materials/polaroid-material'
@@ -36,6 +36,19 @@ function Choose(props: ThreeElements['group']) {
 
   const titleImage = useVideoTexture(`/assets/${collection[0].id}/loop.mov`)
 
+  // `[...collection, ...collection]` created a brand-new array every render
+  // — Slider's internal useCallback chain (idx -> getPos -> runSprings) all
+  // depend on `items`, so a fresh reference every render meant `runSprings`
+  // never stabilized, its consuming effect kept re-firing, and combined
+  // with drei's useTexture render-phase side effect (see the per-item
+  // texture load below) that cascaded into a real "Maximum update depth
+  // exceeded" loop under React 19. Memoized so the reference only changes
+  // when `collection` itself actually does.
+  const doubledCollection = useMemo(
+    () => [...collection, ...collection],
+    [collection]
+  )
+
   useEffect(() => {
     if (titleVisible) {
       titleMask.source.data.play()
@@ -45,45 +58,71 @@ function Choose(props: ThreeElements['group']) {
   const { height: h } = useThree((state) => state.viewport)
 
   const data = useScroll()
-  const [welcomeVisibility, setWelcomeVisibility] = useState(0)
-  const [scrollVisibility, setScrollVisibility] = useState(0)
-  const [whichVisibility, setWhichVisibility] = useState(1)
-  const [polaroidVisibility, setPolaroidVisibility] = useState(0)
-  const [dotVisibility, setDotVisibility] = useState(0)
+  // These all used to be React state, recomputed every frame via useFrame —
+  // Choose renders the whole Slider (up to ~20 polaroid cards, each with
+  // its own useTexture call) underneath it, so a state update here 60x/sec
+  // was re-rendering all of that every frame. None of these values are
+  // read reactively in a way that needs a React re-render: the two opacity
+  // values are set directly on their material refs below, and the two
+  // spring-driven values move to react-spring's imperative .start() api —
+  // see plans/in-progress panel-3 doc's sibling investigation, and
+  // main.tsx's equivalent fix, for the fuller writeup of this pattern.
+  const welcomeVisibilityRef = useRef(0)
+  const whichVisibilityRef = useRef(1)
+  const polaroidVisibilityRef = useRef(0)
+  const welcomeMaterial = useRef<MeshBasicMaterial>(null)
+  const whichMaterial = useRef<MeshBasicMaterial>(null)
 
   const POLAROID_WIDTH = 0.3
 
+  const [{ opacity: actionScrollOpacity }, actionScrollApi] = useSpring(
+    () => ({
+      opacity: 1,
+      config: { ...config.default, precision: 0.0000001 },
+    })
+  )
+
+  const [{ position: polaroidPosition }, polaroidApi] = useSpring(() => ({
+    position: [0, -h * 1.8, 0],
+    config: { ...config.molasses, precision: 0.0000001 },
+  }))
+
   useFrame(() => {
-    if (!dream) {
-      setPolaroidVisibility(
-        MathUtils.lerp(polaroidVisibility, data.range(-0.01, 5 / 10), 0.1)
-      )
-    } else {
-      setPolaroidVisibility(MathUtils.lerp(polaroidVisibility, 0, 0.1))
+    const nextPolaroidVisibility = !dream
+      ? MathUtils.lerp(
+          polaroidVisibilityRef.current,
+          data.range(-0.01, 5 / 10),
+          0.1
+        )
+      : MathUtils.lerp(polaroidVisibilityRef.current, 0, 0.1)
+    polaroidVisibilityRef.current = nextPolaroidVisibility
+    polaroidApi.start({
+      position: [0, -h * (1.8 + (1 - nextPolaroidVisibility) * 2), 0],
+    })
+
+    const nextWelcomeVisibility = MathUtils.lerp(
+      welcomeVisibilityRef.current,
+      data.curve(1 / 10, 9 / 10),
+      0.1
+    )
+    welcomeVisibilityRef.current = nextWelcomeVisibility
+    if (welcomeMaterial.current) {
+      welcomeMaterial.current.opacity = nextWelcomeVisibility
     }
 
-    setWelcomeVisibility(
-      MathUtils.lerp(welcomeVisibility, data.curve(1 / 10, 9 / 10), 0.1)
+    actionScrollApi.start({ opacity: 1.0 - data.range(0, 1 / 100) })
+
+    const nextWhichVisibility = MathUtils.lerp(
+      whichVisibilityRef.current,
+      dream ? 0 : data.range(2 / 3, 1 / 3),
+      0.1
     )
-    setScrollVisibility(data.range(0, 1 / 100))
-    setWhichVisibility(
-      MathUtils.lerp(whichVisibility, dream ? 0 : data.range(2 / 3, 1 / 3), 0.1)
-    )
-    setDotVisibility(data.range(4 / 5, 0.3))
-  })
+    whichVisibilityRef.current = nextWhichVisibility
+    if (whichMaterial.current) {
+      whichMaterial.current.opacity = nextWhichVisibility
+    }
 
-  useEffect(() => {
-    setPolaroidVisible(dotVisibility)
-  }, [dotVisibility])
-
-  const { opacity: actionScrollOpacity } = useSpring({
-    opacity: 1.0 - scrollVisibility,
-    config: { ...config.default, precision: 0.0000001 },
-  })
-
-  const { position: polaroidPosition } = useSpring({
-    position: [0, -h * (1.8 + (1 - polaroidVisibility) * 2), 0],
-    config: { ...config.molasses, precision: 0.0000001 },
+    setPolaroidVisible(data.range(4 / 5, 0.3))
   })
 
   const welcome = useTexture('images/welcome.png')
@@ -149,21 +188,17 @@ function Choose(props: ThreeElements['group']) {
         <planeGeometry
           args={[1, welcome.image.height / welcome.image.width, 1]}
         />
-        <meshBasicMaterial
-          opacity={welcomeVisibility}
-          transparent
-          map={welcome}
-        />
+        <meshBasicMaterial ref={welcomeMaterial} transparent map={welcome} />
       </mesh>
 
       {/* Choose */}
       <mesh position={[0, -h * 1.4, 0]}>
         <planeGeometry args={[1, which.image.height / which.image.width, 1]} />
-        <meshBasicMaterial opacity={whichVisibility} transparent map={which} />
+        <meshBasicMaterial ref={whichMaterial} transparent map={which} />
       </mesh>
       <animated.group position={polaroidPosition as unknown as Vector3}>
         <Slider
-          items={[...collection, ...collection]}
+          items={doubledCollection}
           isDragging={isDragging}
           width={POLAROID_WIDTH}
           visible={collection.length * 2 - 1}
@@ -173,8 +208,19 @@ function Choose(props: ThreeElements['group']) {
             const [hover, setHover] = useState(false)
             useCursor(hover)
 
-            const [size, setSize] = useState([0, 0])
-            const [aspect, setAspect] = useState([0, 0])
+            // Was React state polled every frame via useFrame — size only
+            // actually changes on window resize, and this whole block runs
+            // once per visible card (up to ~20), so that was up to 20
+            // useFrame subscriptions each calling two setStates 60x/sec.
+            // useThree's selector already only re-renders on a real resize.
+            const { width: canvasWidth, height: canvasHeight } = useThree(
+              (state) => state.size
+            )
+            const size = [canvasWidth, canvasHeight]
+            const aspect =
+              canvasWidth > canvasHeight
+                ? [1, canvasWidth / canvasHeight]
+                : [canvasHeight / canvasWidth, 1]
 
             const { uHover: hoverAmount } = useSpring({
               uHover: hover ? 1.0 : 0.0,
@@ -189,14 +235,6 @@ function Choose(props: ThreeElements['group']) {
             const { rotation: rotationAmount } = useSpring({
               rotation: hover ? [-0.25, 0, 0] : [0, 0, 0],
               config: { ...config.molasses, precision: 0.0000001 },
-            })
-
-            useFrame((state) => {
-              const { width, height } = state.size
-              setSize([width, height])
-              setAspect(
-                width > height ? [1, width / height] : [height / width, 1]
-              )
             })
 
             return (

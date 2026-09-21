@@ -2,9 +2,10 @@ import { RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Event as ThreeEvent,
   MathUtils,
+  Mesh,
+  MeshStandardMaterial,
   PerspectiveCamera as PerspectiveCameraType,
   SpotLight,
-  Vector2,
 } from 'three'
 import {
   OrbitControls,
@@ -28,7 +29,6 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
   const isTouch = useStore((state) => state.isTouch)
 
   const dream = useStore((state) => state.dream)
-  const [globalPointer, setGlobalPointer] = useState(new Vector2(0, 0))
   const setShowPlayhead = useStore((state) => state.setShowPlayhead)
   const initialRotation = useStore((state) => state.initialRotation)
   const polaroidVisible = useStore((state) => state.polaroidVisible)
@@ -37,8 +37,15 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
   const setIsTooSlow = useStore((state) => state.setIsTooSlow)
   const videoState = useStore((state) => state.videoState)
 
-  const [bufferingDelay, setBufferingDelay] = useState(0)
-  const [dotOpacity, setDotOpacity] = useState(0)
+  // These three all used to be React state set every frame from useFrame,
+  // re-rendering Scene (and everything under it, including Choose's whole
+  // Slider) 60x/sec — see choose.tsx and main.tsx for the fuller writeup of
+  // this pattern. `globalPointer` in particular used to mirror the store's
+  // per-frame pointer value into local state purely so the dot mesh below
+  // could read it reactively; it's set directly on the mesh ref instead now.
+  const bufferingDelayRef = useRef(0)
+  const dotMesh = useRef<Mesh>(null)
+  const dotMaterial = useRef<MeshStandardMaterial>(null)
 
   const setInitialRotation = useStore((state) => state.setInitialRotation)
   const resetInitialRotation = useStore((state) => state.resetInitialRotation)
@@ -53,20 +60,22 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
     const cameraRef = camera.current
 
     if (videoState < HTMLMediaElement.HAVE_FUTURE_DATA) {
-      setBufferingDelay(bufferingDelay + delta)
+      bufferingDelayRef.current += delta
 
-      if (bufferingDelay >= 8 && !isTooSlow) {
+      if (bufferingDelayRef.current >= 8 && !isTooSlow) {
         console.log('Okay, maybe YouTube')
         setIsTooSlow(true)
       }
     }
 
     if (isMobile || isTouch) {
-      setDotOpacity(polaroidVisible)
+      if (dotMaterial.current) dotMaterial.current.opacity = polaroidVisible
     }
 
     const pointer = useStore.getState().globalPointer
-    setGlobalPointer(pointer)
+    if (dotMesh.current) {
+      dotMesh.current.position.set(pointer.x - 1.0, pointer.y - 1.0, -0.5)
+    }
 
     if (cameraRef && !isMobile && !isTouch) {
       cameraRef.position.x = MathUtils.lerp(
@@ -148,16 +157,12 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
       {isMobile || isTouch ? (
         <>
           <mesh
+            ref={dotMesh}
             visible={dream !== null && !resetting}
-            position={[globalPointer.x - 1.0, globalPointer.y - 1.0, -0.5]}
             scale={0.025}
           >
             <circleGeometry args={[1, 16]} />
-            <meshStandardMaterial
-              color="#666"
-              transparent
-              opacity={dotOpacity}
-            />
+            <meshStandardMaterial ref={dotMaterial} color="#666" transparent />
           </mesh>
         </>
       ) : null}

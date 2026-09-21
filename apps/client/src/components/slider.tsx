@@ -100,15 +100,22 @@ export default function Slider({
   const dragOffset = useRef(0)
 
   const [hover, setHover] = useState(false)
-  const [px, setX] = useState(0)
+  // Was React state (`const [px, setX] = useState(0)`) driven from
+  // useFrame every frame — px is never read in JSX, only fed into
+  // runSprings (an imperative react-spring call) and plain refs, so there
+  // was never a reason for it to trigger a re-render. At 60fps that meant
+  // Slider (and every visible card's useTexture call inside it) re-rendered
+  // 60x/sec, which combined with drei's useTexture render-phase side effect
+  // to trip React 19's "Maximum update depth exceeded" safety limit.
+  const px = useRef(0)
   const [triggerInteractive, setTriggerInteractive] = useState(false)
 
   useCursor(hover)
 
   useFrame((_state, delta) => {
     if ((!triggerInteractive || isTouch) && !isDragging.current) {
-      const positionX = px + delta / 10
-      setX(positionX)
+      const positionX = px.current + delta / 10
+      px.current = positionX
       wheelOffset.current = dragOffset.current = positionX
       runSprings(positionX, 1)
     }
@@ -120,7 +127,7 @@ export default function Slider({
         if (dx) {
           if (!triggerInteractive) setTriggerInteractive(true)
           x = x / 750
-          dragOffset.current = -x + px
+          dragOffset.current = -x + px.current
           runSprings(wheelOffset.current + -x, -dx)
         }
 
@@ -134,7 +141,7 @@ export default function Slider({
         if (dx) {
           if (!triggerInteractive) setTriggerInteractive(true)
           x = x / 1000
-          wheelOffset.current = x + px
+          wheelOffset.current = x + px.current
           runSprings(dragOffset.current + x, dx)
         }
 
