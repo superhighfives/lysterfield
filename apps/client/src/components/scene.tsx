@@ -135,10 +135,19 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
       ) : null}
       <ambientLight intensity={0.5} />
       <group>
+        {/* decay={0} — three.js dropped the legacy (non-physically-correct)
+            lighting mode this session's three/fiber bump pulled in, so this
+            light's intensity is now read as physical candela with real
+            inverse-square falloff by default. At 30 units away that made it
+            contribute almost nothing, leaving the polaroid frames lit by
+            flat ambient only (gray/washed out) instead of this light's
+            highlights. decay={0} restores the old flat, distance-independent
+            falloff this scene was tuned for. */}
         <primitive
           object={spotlight}
           position={[5, 0, 30]}
           intensity={1}
+          decay={0}
           castShadow
           shadow-bias={-0.01}
           shadow-mapSize-width={1024}
