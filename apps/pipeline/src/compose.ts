@@ -22,7 +22,7 @@ export const AUDIO_PATH = path.join(RESOURCES_DIR, 'audio', 'lysterfield-lake.wa
 export interface ComposeInput {
   /** upscale.ts output on the raw source frames */
   artworkFramesDir: string
-  /** background-plate.ts output, run directly on `artworkFramesDir` — already at PANEL_SIZE, no separate upscale needed (see background-plate.ts) */
+  /** background-stabilize.ts output (background-plate.ts's raw fill, stepped + motion-compensated for temporal consistency — see background-stabilize.ts) */
   backgroundFramesDir: string
   matteFramesDir: string
   depthFramesDir: string

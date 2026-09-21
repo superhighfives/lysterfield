@@ -1,5 +1,6 @@
 import { unlink } from 'node:fs/promises'
 import sharp from 'sharp'
+import { loadImageAndMaskRaw } from '../composite.ts'
 import { forEachFrame, framesDir, siblingFramePath, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
 import { runModelToFile } from '../replicate.ts'
@@ -51,16 +52,7 @@ export async function depth(
 }
 
 async function compositeOnTransparent(imagePath: string, maskPath: string): Promise<Buffer> {
-  const { data: rgb } = await sharp(imagePath)
-    .resize(SIZE, SIZE)
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
-  const { data: alpha } = await sharp(maskPath)
-    .resize(SIZE, SIZE)
-    .greyscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
+  const { rgb, alpha } = await loadImageAndMaskRaw(imagePath, maskPath, SIZE)
 
   const rgba = Buffer.alloc(SIZE * SIZE * 4)
   for (let i = 0; i < SIZE * SIZE; i++) {

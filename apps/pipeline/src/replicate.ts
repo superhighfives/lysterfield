@@ -23,7 +23,7 @@ function getClient(): Replicate {
  * Runs a Replicate model to completion and returns its output.
  * `identifier` is "owner/name" (latest version) or "owner/name:version" (pinned).
  */
-export async function runModel<Output = unknown>(
+async function runModel<Output = unknown>(
   identifier: `${string}/${string}` | `${string}/${string}:${string}`,
   input: Record<string, unknown>
 ): Promise<Output> {

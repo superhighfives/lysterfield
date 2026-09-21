@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { loadImageAndMaskRaw } from '../composite.ts'
 import { forEachFrame, framesDir, siblingFramePath, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
 import { runModelToFile } from '../replicate.ts'
@@ -52,16 +53,7 @@ export async function outline(
 
 /** Pastes `imagePath` onto a white SIZE×SIZE canvas using `maskPath` as the alpha. */
 async function compositeOnWhite(imagePath: string, maskPath: string): Promise<Buffer> {
-  const { data: rgb } = await sharp(imagePath)
-    .resize(SIZE, SIZE)
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
-  const { data: alpha } = await sharp(maskPath)
-    .resize(SIZE, SIZE)
-    .greyscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
+  const { rgb, alpha } = await loadImageAndMaskRaw(imagePath, maskPath, SIZE)
 
   const out = Buffer.alloc(SIZE * SIZE * 3)
   for (let i = 0; i < SIZE * SIZE; i++) {
