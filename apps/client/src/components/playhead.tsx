@@ -1,4 +1,5 @@
 import {
+  CSSProperties,
   forwardRef,
   HTMLProps,
   MutableRefObject,
@@ -157,11 +158,48 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           </button>
         </div>
         <div
-          className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 bg-white border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity ${
+          className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[54px] bg-white border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity ${
             showPlayhead && polaroidVisible > 0.3
               ? ''
               : 'pointer-events-none opacity-0'
           }`}
+          // media-chrome renders our unslotted controls div (see below)
+          // inside an internal `part="vertical-layer"` span that it makes
+          // `position: absolute; inset: 0` by default — built for
+          // overlaying controls on a visible video. Since MediaController
+          // is `display: contents` here, that span's containing block is
+          // this pill, and being out of flow it contributed nothing to a
+          // shrink-to-fit size — the pill collapsed to its 2px border with
+          // the real controls floating outside it. Giving the pill this
+          // explicit size (rather than fighting the internal layer's own
+          // positioning via ::part(), which got the sizing right but broke
+          // the icons' actual paint) gives that absolutely-positioned layer
+          // a real box to fill, matching the two-row (stacked, below the
+          // `xs` breakpoint) vs one-row content heights.
+          // Unlike @react-av, media-chrome isn't headless — every control
+          // ships its own dark, semi-opaque default skin (rgb(20 20 30 /
+          // .7) background, near-white text/icon color) baked into its
+          // shadow DOM via --media-control-background/--media-text-color
+          // etc. Our Tailwind classes on these elements only style the
+          // light-DOM host (e.g. hover:bg-yellow-200), so without this the
+          // default skin's resting-state background/color still show
+          // through as a scattered row of dark boxes instead of this pill's
+          // white/yellow design. These custom properties are media-chrome's
+          // documented styling hook and inherit through the shadow
+          // boundary into every descendant control in one place.
+          style={
+            {
+              '--media-control-background': 'transparent',
+              '--media-control-hover-background': 'transparent',
+              '--media-text-color': 'currentColor',
+              '--media-primary-color': 'currentColor',
+              // media-chrome-button's shadow CSS sets icon width from this
+              // variable with no fallback (unlike icon-height, which falls
+              // back to 24px) — left unset, the icons rendered a real
+              // height but a 0 width, making them invisible.
+              '--media-button-icon-width': '24px',
+            } as CSSProperties
+          }
         >
           <MediaController className="contents">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption -- generated video has no dialogue/caption track to provide */}
@@ -205,17 +243,47 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                 <Footer />
                 <div className="group flex relative">
                   <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2">
-                    <SpeakerSimpleX slot="off" />
-                    <SpeakerSimpleLow slot="low" />
-                    <SpeakerSimpleNone slot="medium" />
-                    <SpeakerSimpleHigh slot="high" />
+                    {/*
+                      media-chrome-button's shadow CSS sizes slotted icons
+                      via `width: var(--media-button-icon-width)` plus
+                      `min-width/max-width: 100%` against the icon's real
+                      (post-`display:contents`-unwrapping) flex container —
+                      a percentage constraint that resolves to 0 for
+                      whichever icon is actually the visible one, even
+                      though --media-button-icon-width itself is set.
+                      `!important` on width alone doesn't help: min/max-width
+                      still clamp whatever width value it's applied to, so
+                      those need overriding too, not just width itself.
+                    */}
+                    <SpeakerSimpleX
+                      slot="off"
+                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                    />
+                    <SpeakerSimpleLow
+                      slot="low"
+                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                    />
+                    <SpeakerSimpleNone
+                      slot="medium"
+                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                    />
+                    <SpeakerSimpleHigh
+                      slot="high"
+                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                    />
                   </MediaMuteButton>
                   <Tooltip text="Toggle mute" />
                 </div>
                 <div className="group flex relative">
                   <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 pr-4 py-2">
-                    <Play slot="play" />
-                    <Pause slot="pause" />
+                    <Play
+                      slot="play"
+                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                    />
+                    <Pause
+                      slot="pause"
+                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                    />
                   </MediaPlayButton>
                   <Tooltip text={videoPlaying ? 'Pause' : 'Play'} />
                 </div>

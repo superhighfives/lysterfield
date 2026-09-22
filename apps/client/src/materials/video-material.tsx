@@ -119,9 +119,24 @@ export const VideoMaterial = shaderMaterial(
         offsetX = -uPointerRelative.x / 40.0;
         offsetY = -uPointerRelative.y / 40.0;
       }
-      
-      vec4 image = texture2D(uTexture, vec2((vUv.x - offsetX + (uFrameSelected - 1.0)) / uFrameTotal, uInvert == 1.0 ? 1.0 - vUv.y : vUv.y - offsetY));
-      vec4 mask = texture2D(uTexture, vec2((vUv.x - offsetX + (uFrameMask - 1.0)) / uFrameTotal, vUv.y - offsetY));
+
+      // vUv.x - offsetX can land outside [0, 1] once offsetX (the pointer
+      // parallax nudge, up to +/-0.05) pushes it past this frame's own
+      // sub-range within the 7-frame atlas — clamped here so a frame lookup
+      // never crosses into the neighbouring frame's pixels. Unclamped, that
+      // showed up as a thin vertical strip of a neighbouring frame's raw
+      // (unmasked) content bleeding in along the mesh's edge. Clamping to
+      // exactly [0, 1] isn't quite enough on its own: bilinear filtering
+      // samples a texel either side of wherever it lands, so a value sitting
+      // right on the 0/1 boundary still blends in half a texel's worth of
+      // the next frame over. Pulling the clamp in by one texel's width
+      // (each frame is a 512px slice of a 3584px atlas, so 1/512 of this
+      // frame's own [0, 1] span) keeps the sample, and its filter footprint,
+      // fully inside this frame.
+      float localX = clamp(vUv.x - offsetX, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
+
+      vec4 image = texture2D(uTexture, vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, uInvert == 1.0 ? 1.0 - vUv.y : vUv.y - offsetY));
+      vec4 mask = texture2D(uTexture, vec2((localX + (uFrameMask - 1.0)) / uFrameTotal, vUv.y - offsetY));
 
       float mixValue = uMaskIntensity;
       float shortenedFadeAmount = 1.0 - clamp((uTime / 4.0) - 0.75, 0.0, 1.0);
@@ -136,7 +151,7 @@ export const VideoMaterial = shaderMaterial(
       if(uFrameOverlay != 0.0) {
         fadeAmount = extendedFadeAmount;
 
-        vec4 overlay = texture2D(uTexture, vec2((vUv.x - offsetX + (uFrameOverlay - 1.0)) / uFrameTotal, vUv.y - offsetY));
+        vec4 overlay = texture2D(uTexture, vec2((localX + (uFrameOverlay - 1.0)) / uFrameTotal, vUv.y - offsetY));
 
         float minRadius = 0.15;
         float maxRadius = 0.5;
@@ -158,7 +173,7 @@ export const VideoMaterial = shaderMaterial(
       if(uAvatar == 1.0) {
         fadeAmount = extendedFadeAmount;
 
-        vec4 sketch = texture2D(uTexture, vec2((vUv.x - offsetX + (uFrameSketch - 1.0)) / uFrameTotal, vUv.y - offsetY));
+        vec4 sketch = texture2D(uTexture, vec2((localX + (uFrameSketch - 1.0)) / uFrameTotal, vUv.y - offsetY));
 
         vec4 luma = vec4(0.299, 0.587, 0.114, 0.0);
         float grayscale = dot(sketch, luma);
@@ -193,7 +208,7 @@ export const VideoMaterial = shaderMaterial(
           for (int i = 1; i <= SHADOW_STEPS; i++) {
             float d = (float(i) / float(SHADOW_STEPS)) * SHADOW_MAX_DIST;
             vec2 shadowUv = vec2(
-              (vUv.x - offsetX + (uFrameMask - 1.0)) / uFrameTotal,
+              (localX + (uFrameMask - 1.0)) / uFrameTotal,
               vUv.y - offsetY + FEET_DIR * d
             );
             float m = texture2D(uTexture, shadowUv).r;
