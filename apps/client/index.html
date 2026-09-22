@@ -46,16 +46,71 @@
     <meta property="twitter:image" content="%VITE_APP_IMAGE%" />
 
     <!-- Preload -->
-    <link rel="preload" href="/assets/20230808103741/hero.jpg" as="image" />
-    <link rel="preload" href="/assets/20230809134901/hero.jpg" as="image" />
-    <link rel="preload" href="/assets/20230810222655/hero.jpg" as="image" />
-    <link rel="preload" href="/assets/20230811110431/hero.jpg" as="image" />
-    <link rel="preload" href="/assets/20230812000902/hero.jpg" as="image" />
-    <link rel="preload" href="/assets/20230812145711/hero.jpg" as="image" />
-    <link rel="preload" href="/assets/20230816110119/hero.jpg" as="image" />
-    <link rel="preload" href="/assets/20230817131418/hero.jpg" as="image" />
-    <link rel="preload" href="/assets/20230818151910/hero.jpg" as="image" />
-    <link rel="preload" href="/assets/20230819073500/hero.jpg" as="image" />
+    <!-- crossorigin="anonymous" matches three.js's TextureLoader, which
+         fetches with crossOrigin="anonymous" by default — without this the
+         preloaded request's credentials mode doesn't match the texture
+         loader's actual fetch, so the browser discards the preload and
+         double-fetches every hero.jpg. -->
+    <link
+      rel="preload"
+      href="/assets/20230808103741/hero.jpg"
+      as="image"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/20230809134901/hero.jpg"
+      as="image"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/20230810222655/hero.jpg"
+      as="image"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/20230811110431/hero.jpg"
+      as="image"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/20230812000902/hero.jpg"
+      as="image"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/20230812145711/hero.jpg"
+      as="image"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/20230816110119/hero.jpg"
+      as="image"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/20230817131418/hero.jpg"
+      as="image"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/20230818151910/hero.jpg"
+      as="image"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/20230819073500/hero.jpg"
+      as="image"
+      crossorigin="anonymous"
+    />
   </head>
   <body class="bg-stone-100 text-stone-900">
     <div id="root"></div>
