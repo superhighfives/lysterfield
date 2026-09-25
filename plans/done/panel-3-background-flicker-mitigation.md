@@ -1,8 +1,8 @@
 ---
 title: "Panel 3 (background) flicker mitigation on real footage"
-status: In Progress
+status: Done
 created: 2026-09-17
-updated: 2026-09-18
+updated: 2026-09-24
 ---
 
 # Panel 3 (background) flicker mitigation on real footage
@@ -417,14 +417,37 @@ zone/stepped experiments' source data stays intact).
 - [x] Commit the accumulated work — pipeline (reorder fix, size
       optimization, background-stabilize, leak-detection, mask.ts
       extraction) and the client shader change, one commit.
-- [ ] Live-verify the WebGL contact shadow against a real scene; flip
-      `FEET_DIR` if needed, tune reach/opacity — still needs the user's own
-      eyes, no full-atlas video fixture exists locally to test against
+- [x] Live-verify the WebGL contact shadow against a real scene — done
+      2026-09-24, once a full-atlas video fixture became available
+      locally (10 published dreams' real video pulled from the drive,
+      `public/dreams` symlinked so the dev server serves them). Traced
+      live against a real scene (`20230811110431`, "Dirty Palette"):
+      confirmed the shader fires and computes a real, non-trivial
+      shadow alpha (~28% at the boundary, verified against the actual
+      sampled matte pixel data), but for this style of shot the
+      person-mask runs to the bottom edge of frame with no feet-to-
+      ground transition to march toward — a bust/shoulders double-
+      exposure, not a standing figure on visible ground — so what the
+      shader computes lands against an already-dark, busy part of the
+      watercolor and isn't perceptible. Decided with the user: drop it
+      rather than tune it further, since the mismatch is conceptual
+      (the effect assumes a shot type this pipeline doesn't produce),
+      not a parameter to dial in. Removed from `video-material.tsx`;
+      `steps/shadow.ts` (the separate, already-parked depth-based halo)
+      is untouched.
 
 ## Open questions
 
-- How should zone-based crossfade's per-clip hardcoded reference
-  frames/zone boundaries generalize to scenes with zero, one, or multiple
-  content-reveal moments?
-- Does a softened overall style (next up, above) reduce the need for a
-  sophisticated temporal-mitigation technique at all, or are they additive?
+- **Deferred, not blocking** — how should zone-based crossfade's per-clip
+  hardcoded reference frames/zone boundaries generalize to scenes with
+  zero, one, or multiple content-reveal moments? Moot for now: the
+  adopted, formalized technique is masked-stepped (motion-compensated
+  mask), not zone-based — zone-based remains on record as the cleanest
+  *sharp-style* option (see "Line in the sand") if that's ever revisited,
+  but nothing currently depends on generalizing it.
+- **Resolved** — does a softened overall style reduce the need for a
+  sophisticated temporal-mitigation technique at all, or are they
+  additive? Additive, confirmed via full-clip audit: the softened style
+  (option 2) measurably reduces per-frame noise everywhere except right
+  at genuine content-reveal moments, but doesn't remove the need for the
+  masked-stepped technique to handle those moments cleanly.
