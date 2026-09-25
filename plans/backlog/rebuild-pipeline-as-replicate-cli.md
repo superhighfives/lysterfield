@@ -1,8 +1,8 @@
 ---
 title: Rebuild the pipeline as a single Replicate-driven CLI in a unified lysterfield repo
-status: In Progress
+status: Backlog
 created: 2026-08-16
-updated: 2026-08-17
+updated: 2026-09-24
 ---
 
 # Rebuild the pipeline as a single Replicate-driven CLI in a unified lysterfield repo
