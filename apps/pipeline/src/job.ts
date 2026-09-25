@@ -67,6 +67,20 @@ export async function dynamicPath(job: Job, take: string, name: string, ext = 'm
 }
 
 /**
+ * Ensures `<job.dir>/dynamic/<take>/frames/<name>/` exists and returns its
+ * path — the per-take counterpart of `framesDir`. Only the dream panel
+ * needs this: unlike every other panel (generated once from the source
+ * footage, shared across every take), dream frames are themselves the
+ * thing that differs between takes, so they can't live under the
+ * take-independent `static/frames/`.
+ */
+export async function dynamicFramesDir(job: Job, take: string, name: string): Promise<string> {
+  const dir = path.join(job.dir, 'dynamic', take, 'frames', name)
+  await mkdir(dir, { recursive: true })
+  return dir
+}
+
+/**
  * Runs `fn` once per frame found in `inputDir`, writing to the matching path
  * in `outputDir` — skipping any frame whose output already exists, mirroring
  * the legacy scripts' `[ -f ... ] ||` / `if not os.path.exists()` checks.

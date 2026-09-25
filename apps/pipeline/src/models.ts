@@ -43,9 +43,35 @@ export const MODELS = {
    * inpaint region), so no change needed on the caller side.
    */
   backgroundInpaint: 'black-forest-labs/flux-fill-pro:41c767bcbfffe54ef8f05eb4d0100f9314790f7fc43a7b88d73ec06839deddb9',
-  /** Dreaming step — see phase 2's prototyping for why this was picked over Grok Imagine. */
-  dream:
-    'kwaivgi/kling-v3-omni-video:460d4f46adf3c29abbcd8f42cf5434570da6b50a39ec4593f2006486b1dd3fba',
+  /**
+   * Dream step — replaced `kwaivgi/kling-v3-omni-video` (phase 2's pick
+   * over Grok Imagine) after live-testing showed it doesn't actually do
+   * what the legacy pipeline's dreaming lane did. Checked the real
+   * Deforum output on the external drive frame-by-frame: contrary to this
+   * file's earlier assumption, `hybrid_composite` locks the animation's
+   * structure/layout tightly to the real footage after the first few
+   * frames (a boardwalk stays a boardwalk, a treeline stays a treeline)
+   * while the diffusion still fully reimagines it as a painting — genuine
+   * "same structure, new style," not a filter. Kling's `start_image` +
+   * `reference_images` doesn't reproduce that: across three prompt/
+   * reference variations, it either left frames almost untouched or
+   * cross-dissolved the whole frame into the reference image's own
+   * content, erasing the person rather than reimagining them.
+   *
+   * `black-forest-labs/flux-kontext-dev` — a prompt-driven image *editor*,
+   * not a generic img2img model — reproduces the real pattern almost
+   * exactly when called per real frame (not per scene): same pose,
+   * composition, and background, fully repainted. This is the same model
+   * that lost the artwork-step comparison to DiffusionCLIP (see
+   * `artwork` above) — but that comparison was about matching
+   * DiffusionCLIP's specific watercolor look, which it resisted; here
+   * there's no fixed look to match, so its actual strength (structure-
+   * locked, prompt-driven reimagining) is exactly what's needed. Called
+   * once per *kept* frame at a reduced step-fps (see `dream.ts`), not
+   * once per scene — Kling's one-call-per-scene shape is why it could
+   * never track real per-frame motion, no matter the prompt.
+   */
+  dream: 'black-forest-labs/flux-kontext-dev:85723d503c17da3f9fd9cecfb9987a8bf60ef747fd8f68a25d7636f88260eb59',
   /**
    * Outline step — the packaged ArtLine model from `models/outline/`
    * (phase 2), no public port exists. Runs on CPU, not GPU — a `gpu: true`

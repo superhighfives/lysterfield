@@ -29,8 +29,8 @@ export interface ComposeInput {
   outlineFramesDir: string
   /** Which dream attempt to composite — see job.ts's `dynamicPath`. Every output below is written under `dynamic/<take>/`. */
   take: string
-  /** dream.ts output — raw Kling clip, not yet normalized. Defaults to `dynamic/<take>/dream.mp4`; override only for one-off tests against an arbitrary file. */
-  dreamVideoPath?: string
+  /** dream.ts output — a per-take frames folder, same shape as the other panels (see job.ts's `dynamicFramesDir`). */
+  dreamFramesDir: string
   /** Overrides the real audio's duration for the final clip length — for a quick review render against a short test job's actual unique frame count, rather than looping/clipping to a full ~3.5min song. Real scenes should never set this. */
   durationSeconds?: number
 }
@@ -59,14 +59,13 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
   await mkdir(staticDir, { recursive: true })
 
   const audioDuration = input.durationSeconds ?? (await probeDuration(AUDIO_PATH))
-  const dreamVideoPath = input.dreamVideoPath ?? (await dynamicPath(job, input.take, 'dream', 'mp4'))
 
   const artworkPanel = await normalizeFramesPanel(job, 'artwork', input.artworkFramesDir, 'jpg')
   const backgroundPanel = await normalizeFramesPanel(job, 'background', input.backgroundFramesDir, 'jpg')
   const mattePanel = await normalizeFramesPanel(job, 'matte', input.matteFramesDir, 'png')
   const depthPanel = await normalizeFramesPanel(job, 'depth', input.depthFramesDir, 'jpg')
   const outlinePanel = await normalizeFramesPanel(job, 'outline', input.outlineFramesDir, 'jpg')
-  const dreamPanel = await normalizeDreamPanel(job, input.take, dreamVideoPath, audioDuration)
+  const dreamPanel = await normalizeDreamPanel(job, input.take, input.dreamFramesDir)
 
   const compositeVideoPath = await dynamicPath(job, input.take, 'composite')
   await hstackWithAudio(
@@ -131,43 +130,16 @@ async function normalizeFramesPanel(job: Job, name: string, framesDir: string, e
 }
 
 /**
- * The dream panel is the one non-square, non-frame-folder input (Kling's
- * 1280x720 output) and, per the user's call, needs looping to fill the
- * audio's full length — the 5s Kling clip is much shorter than a real
- * song. Center-crop to square first so scaling doesn't distort it.
- *
- * Also reproduces the legacy pipeline's dream-panel cadence: the original
- * Deforum frames were only ever generated at 10fps, then held up to the
- * full output rate with `minterpolate='mi_mode=dup'` (generate-dreaming.sh)
- * — a deliberate stepped/stop-motion look, not a cost-saving shortcut we
- * need here (Kling is one call per scene regardless of fps). `fps=10`
- * first downsamples Kling's native smooth output so `minterpolate`'s dup
- * mode has 10 real unique frames per second to hold, matching that look
- * rather than just relabeling the existing smooth motion at a lower rate.
+ * The dream panel is now a per-frame folder like every other panel (see
+ * `dream.ts` — flux-kontext-dev called once per kept frame, with the
+ * stepped/held cadence already baked into the frame sequence itself), the
+ * one difference being it's take-specific so its compiled video lives
+ * under `dynamic/<take>/` rather than the shared `static/video/` every
+ * other panel's compile is cached under.
  */
-async function normalizeDreamPanel(
-  job: Job,
-  take: string,
-  dreamVideoPath: string,
-  minDuration: number
-): Promise<string> {
+async function normalizeDreamPanel(job: Job, take: string, framesDir: string): Promise<string> {
   const out = await dynamicPath(job, take, 'panel-dream')
-  await execFileAsync('ffmpeg', [
-    '-y',
-    '-stream_loop',
-    '-1',
-    '-i',
-    dreamVideoPath,
-    '-vf',
-    `crop='min(iw\\,ih)':'min(iw\\,ih)',scale=${PANEL_SIZE}:${PANEL_SIZE},fps=10,minterpolate='mi_mode=dup:fps=${job.fps}'`,
-    '-t',
-    String(minDuration),
-    '-c:v',
-    'libx264',
-    '-pix_fmt',
-    'yuv420p',
-    out,
-  ])
+  await compileFramesToVideo(framesDir, out, { fps: job.fps, scale: `${PANEL_SIZE}:${PANEL_SIZE}`, ext: 'jpg' })
   return out
 }
 

@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeClientAssets } from './client-manifest.ts'
 import { compose } from './compose.ts'
-import { loadJob, videoPath, type Job } from './job.ts'
+import { dynamicFramesDir, loadJob, videoPath, type Job } from './job.ts'
 import { artwork } from './steps/artwork.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
 import { stabilizeBackground } from './steps/background-stabilize.ts'
@@ -146,11 +146,12 @@ switch (step) {
 
   case 'dream': {
     const job = await loadJob(requireFlag('job'))
-    const result = await dream(job, {
+    const result = await dream(job, frameDirFlag(job, 'source', 'source'), {
       prompt: requireFlag('prompt'),
-      styleRefPath: requireFlag('style-ref'),
-      framePath: flags.frame,
       take: requireFlag('take'),
+      stepFps: flags['step-fps'] ? Number(flags['step-fps']) : undefined,
+      concurrency,
+      seed: flags.seed ? Number(flags.seed) : undefined,
     })
     console.log(JSON.stringify(result, null, 2))
     break
@@ -159,14 +160,15 @@ switch (step) {
   case 'compose': {
     const job = await loadJob(requireFlag('job'))
     const id = requireFlag('id')
+    const take = requireFlag('take')
     const result = await compose(job, {
       artworkFramesDir: frameDirFlag(job, 'artwork-upscaled', 'artwork'),
       backgroundFramesDir: frameDirFlag(job, 'background-stable', 'background'),
       matteFramesDir: frameDirFlag(job, 'alpha', 'matte'),
       depthFramesDir: frameDirFlag(job, 'depth', 'depth'),
       outlineFramesDir: frameDirFlag(job, 'outline', 'outline'),
-      take: requireFlag('take'),
-      dreamVideoPath: flags.dream,
+      take,
+      dreamFramesDir: flags['dream-frames'] ?? (await dynamicFramesDir(job, take, 'dream')),
       durationSeconds: flags.duration ? Number(flags.duration) : undefined,
     })
     console.log(JSON.stringify(result, null, 2))
