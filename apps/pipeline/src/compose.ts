@@ -31,6 +31,8 @@ export interface ComposeInput {
   take: string
   /** dream.ts output — raw Kling clip, not yet normalized. Defaults to `dynamic/<take>/dream.mp4`; override only for one-off tests against an arbitrary file. */
   dreamVideoPath?: string
+  /** Overrides the real audio's duration for the final clip length — for a quick review render against a short test job's actual unique frame count, rather than looping/clipping to a full ~3.5min song. Real scenes should never set this. */
+  durationSeconds?: number
 }
 
 export interface ComposeResult {
@@ -56,7 +58,7 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
   const staticDir = path.join(job.dir, 'static')
   await mkdir(staticDir, { recursive: true })
 
-  const audioDuration = await probeDuration(AUDIO_PATH)
+  const audioDuration = input.durationSeconds ?? (await probeDuration(AUDIO_PATH))
   const dreamVideoPath = input.dreamVideoPath ?? (await dynamicPath(job, input.take, 'dream', 'mp4'))
 
   const artworkPanel = await normalizeFramesPanel(job, 'artwork', input.artworkFramesDir, 'jpg')

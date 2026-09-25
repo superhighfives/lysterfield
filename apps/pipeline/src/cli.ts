@@ -167,6 +167,7 @@ switch (step) {
       outlineFramesDir: frameDirFlag(job, 'outline', 'outline'),
       take: requireFlag('take'),
       dreamVideoPath: flags.dream,
+      durationSeconds: flags.duration ? Number(flags.duration) : undefined,
     })
     console.log(JSON.stringify(result, null, 2))
 
