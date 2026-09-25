@@ -168,7 +168,6 @@ export const VideoMaterial = shaderMaterial(
       }
 
       float opacityOverride = 0.0;
-      float shadowAlpha = 0.0;
 
       if(uAvatar == 1.0) {
         fadeAmount = extendedFadeAmount;
@@ -191,39 +190,9 @@ export const VideoMaterial = shaderMaterial(
         float radial = clamp((0.5 - vUv.y) * 1.0 - mixAmount, 0.0, 1.0);
 
         opacityOverride = ((1.0 - (mixAmount - radial + (mask.r * uIdle))) * fadeIn);
-
-        // Contact shadow: only relevant where THIS pixel is outside the
-        // person's own silhouette (mask.r low) — march toward the feet
-        // (FEET_DIR flips if the atlas's V axis turns out flipped in
-        // practice; verify live and flip the sign if the shadow shows up
-        // above the head instead) sampling the same mask texture, and
-        // shadow pixels close to a person-edge above them. Cheap (14
-        // texture samples, only for non-person pixels) vs. tracking
-        // per-frame feet position on the CPU side.
-        if (mask.r < 0.5) {
-          const int SHADOW_STEPS = 14;
-          const float SHADOW_MAX_DIST = 0.18;
-          const float FEET_DIR = 1.0;
-          float shadowDist = SHADOW_MAX_DIST;
-          for (int i = 1; i <= SHADOW_STEPS; i++) {
-            float d = (float(i) / float(SHADOW_STEPS)) * SHADOW_MAX_DIST;
-            vec2 shadowUv = vec2(
-              (localX + (uFrameMask - 1.0)) / uFrameTotal,
-              vUv.y - offsetY + FEET_DIR * d
-            );
-            float m = texture2D(uTexture, shadowUv).r;
-            if (m > 0.5) {
-              shadowDist = d;
-              break;
-            }
-          }
-          float shadowT = 1.0 - (shadowDist / SHADOW_MAX_DIST);
-          shadowAlpha = pow(clamp(shadowT, 0.0, 1.0), 1.5) * 0.45;
-        }
       }
 
       image = mix(image, white, fadeAmount);
-      image = mix(image, vec4(vec3(0.0), 1.0), shadowAlpha);
 
       //Calculate edge curvature
       vec2 curve = pow(abs(vUv * 2.0 - 1.0), vec2(1.0 / 0.005));
@@ -239,7 +208,7 @@ export const VideoMaterial = shaderMaterial(
       }
 
       float baseAlpha = uOpacity - mixValue * (1.0 - mask.r + maskIncrease + opacityOverride);
-      gl_FragColor = vec4(vec3(image), max(baseAlpha, shadowAlpha));
+      gl_FragColor = vec4(vec3(image), baseAlpha);
 
       //Add vignette to the resulting texture
       gl_FragColor.a *= vignette;

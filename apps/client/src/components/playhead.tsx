@@ -295,7 +295,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                     [&::part(track)]:bg-slate-300/40 [&::part(track)]:rounded-full [&::part(track)]:h-2
                     [&::part(buffered)]:bg-slate-300/60 [&::part(buffered)]:rounded-full
                     [&::part(progress)]:bg-yellow-400 [&::part(progress)]:rounded-full
-                    [&::part(thumb)]:bg-slate-50 [&::part(thumb)]:border [&::part(thumb)]:border-yellow-500 [&::part(thumb)]:w-4 [&::part(thumb)]:h-4 [&::part(thumb)]:rounded-full"
+                    [&::part(thumb)]:bg-slate-50 [&::part(thumb)]:border [&::part(thumb)]:border-solid [&::part(thumb)]:border-yellow-500 [&::part(thumb)]:w-4 [&::part(thumb)]:h-4 [&::part(thumb)]:rounded-full"
                 >
                   <MediaPreviewTimeDisplay
                     slot="preview"
