@@ -16,6 +16,24 @@ import {
 import { animated, useSpring, config, a } from '@react-spring/three'
 import { useStore } from '../store'
 import Slider from '../components/slider'
+import dreams from '../dreams.json'
+
+// Warms suspend-react's cache (the mechanism behind every useTexture call in
+// this file and in Slider's per-card render prop below) at module-evaluation
+// time, before Choose ever renders. A cache hit inside a component's render
+// body returns synchronously without calling TextureLoader.load(), so it
+// never reaches THREE's LoadingManager.itemStart() — which is what
+// synchronously updates drei's useProgress() store (Loading's data source)
+// while Choose/Slider are still mid-render, tripping React 19's "Cannot
+// update a component while rendering a different component" check. Same
+// family of render-phase-side-effect bug as this file's `doubledCollection`
+// memoization and slider.tsx's `runSprings`/state-in-useFrame comments —
+// just the one instance those passes didn't catch, since useTexture itself
+// (not a state update built on top of it) is the actual culprit here.
+useTexture.preload('images/welcome.png')
+useTexture.preload('images/action-scroll.png')
+useTexture.preload('images/choose.png')
+dreams.forEach((dream) => useTexture.preload(`/assets/${dream.id}/hero.jpg`))
 
 function Choose(props: ThreeElements['group']) {
   const collection = useStore((state) => state.collection)
