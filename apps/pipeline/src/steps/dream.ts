@@ -1,6 +1,6 @@
 import { copyFile } from 'node:fs/promises'
 import path from 'node:path'
-import { dynamicFramesDir, exists, listFrames, type Job } from '../job.ts'
+import { exists, framesDir, listFrames, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
 import { readFileAsInput, runModelToFile } from '../replicate.ts'
 
@@ -11,7 +11,7 @@ export interface DreamResult {
 export interface DreamOptions {
   /** Describes the reimagined look — the one creative choice that varies per take, so it's a caller-supplied prompt rather than a fixed constant like artwork.ts's. */
   prompt: string
-  /** Name for this dream attempt — written to `dynamic/<take>/frames/dream/`, never overwriting another take. */
+  /** Name for this dream attempt — written to `7-dreams/<take>/frames/`, never overwriting another take. */
   take: string
   /** How many of the real per-second frames actually get regenerated; the rest hold the nearest one. Matches panel 3's stepped cadence (background-stabilize.ts) and the legacy Deforum dreaming lane's own ~10fps generation rate — a deliberate stop-motion look, not a cost-saving shortcut. */
   stepFps?: number
@@ -54,7 +54,7 @@ export async function dream(job: Job, sourceFramesDir: string, opts: DreamOption
   }
   const interval = job.fps / stepFps
 
-  const outputDir = await dynamicFramesDir(job, opts.take, 'dream')
+  const outputDir = await framesDir(job, `7-dreams/${opts.take}/frames`)
   const frames = await listFrames(sourceFramesDir)
   if (frames.length === 0) throw new Error(`No frames found in ${sourceFramesDir}`)
 

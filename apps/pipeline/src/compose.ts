@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import { mkdir } from 'node:fs/promises'
+import { copyFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
-import { compileFramesToVideo, dynamicPath, firstFrame, videoPath as jobVideoPath, type Job } from './job.ts'
+import { compileFramesToVideo, exists, firstFrame, videoPath, type Job } from './job.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -15,21 +15,25 @@ const RESOURCES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '.
  * Fixed, non-per-scene assets — one words.mov + one audio track shared by
  * every scene. Matches the legacy `generate-videos.sh`'s literal paths
  * (`resources/words/words.mov`, `resources/audio/lysterfield-lake.wav`).
+ * `WORDS_VIDEO_PATH` is the single source file; compose() copies it into
+ * each job's own `1-words/` folder (see `ensureWordsPanel`) so every job
+ * directory holds a folder per panel 1-7, panel 1 included, even though
+ * its content never varies between jobs or takes.
  */
 export const WORDS_VIDEO_PATH = path.join(RESOURCES_DIR, 'words', 'words.mov')
 export const AUDIO_PATH = path.join(RESOURCES_DIR, 'audio', 'lysterfield-lake.wav')
 
 export interface ComposeInput {
-  /** upscale.ts output on the raw source frames */
-  artworkFramesDir: string
+  /** upscale.ts output on the raw portrait (panel 2) frames */
+  portraitFramesDir: string
   /** background-stabilize.ts output (background-plate.ts's raw fill, stepped + motion-compensated for temporal consistency — see background-stabilize.ts) */
   backgroundFramesDir: string
   matteFramesDir: string
   depthFramesDir: string
   outlineFramesDir: string
-  /** Which dream attempt to composite — see job.ts's `dynamicPath`. Every output below is written under `dynamic/<take>/`. */
+  /** Which dream attempt to composite — every output below is written under `7-dreams/<take>/`. */
   take: string
-  /** dream.ts output — a per-take frames folder, same shape as the other panels (see job.ts's `dynamicFramesDir`). */
+  /** dream.ts output — a per-take frames folder, same shape as every other panel. */
   dreamFramesDir: string
   /** Overrides the real audio's duration for the final clip length — for a quick review render against a short test job's actual unique frame count, rather than looping/clipping to a full ~3.5min song. Real scenes should never set this. */
   durationSeconds?: number
@@ -44,47 +48,52 @@ export interface ComposeResult {
   videoSmallWebmPath: string
   /** 5s loop clip cropped from the dream panel — apps/client's choose-screen asset. */
   loopPath: string
-  /** apps/client's choose-screen thumbnail, from the artwork panel's first frame. */
+  /** apps/client's choose-screen thumbnail, from the portrait panel's first frame. */
   heroImagePath: string
 }
 
 /**
- * Ports generate-videos.sh: 7-panel hstack (words, artwork, background,
+ * Ports generate-videos.sh: 7-panel hstack (words, portrait, background,
  * matte, depth, outline, dream — the exact order the client shader
  * expects) + audio mux, clipped to the audio's length, then the
  * video/video-small/loop/hero compression passes.
+ *
+ * Each panel's compiled video lives under that panel's own numbered folder
+ * (`2-portrait/video/panel.mov`, etc.) — shared across every take for
+ * panels 1-6, since their frame inputs don't depend on which dream take is
+ * selected; panel 7's compile and every output below it lives under
+ * `7-dreams/<take>/` instead, since the dream frames themselves are the
+ * one thing that varies per take.
  */
 export async function compose(job: Job, input: ComposeInput): Promise<ComposeResult> {
-  const staticDir = path.join(job.dir, 'static')
-  await mkdir(staticDir, { recursive: true })
-
   const audioDuration = input.durationSeconds ?? (await probeDuration(AUDIO_PATH))
 
-  const artworkPanel = await normalizeFramesPanel(job, 'artwork', input.artworkFramesDir, 'jpg')
-  const backgroundPanel = await normalizeFramesPanel(job, 'background', input.backgroundFramesDir, 'jpg')
-  const mattePanel = await normalizeFramesPanel(job, 'matte', input.matteFramesDir, 'png')
-  const depthPanel = await normalizeFramesPanel(job, 'depth', input.depthFramesDir, 'jpg')
-  const outlinePanel = await normalizeFramesPanel(job, 'outline', input.outlineFramesDir, 'jpg')
-  const dreamPanel = await normalizeDreamPanel(job, input.take, input.dreamFramesDir)
+  const wordsPanel = await ensureWordsPanel(job)
+  const portraitPanel = await normalizePanel(job, '2-portrait', input.portraitFramesDir, 'jpg')
+  const backgroundPanel = await normalizePanel(job, '3-background', input.backgroundFramesDir, 'jpg')
+  const mattePanel = await normalizePanel(job, '4-matte', input.matteFramesDir, 'png')
+  const depthPanel = await normalizePanel(job, '5-depth', input.depthFramesDir, 'jpg')
+  const outlinePanel = await normalizePanel(job, '6-outline', input.outlineFramesDir, 'jpg')
+  const dreamPanel = await normalizePanel(job, `7-dreams/${input.take}`, input.dreamFramesDir, 'jpg')
 
-  const compositeVideoPath = await dynamicPath(job, input.take, 'composite')
+  const compositeVideoPath = await videoPath(job, `7-dreams/${input.take}/composite`)
   await hstackWithAudio(
-    [WORDS_VIDEO_PATH, artworkPanel, backgroundPanel, mattePanel, depthPanel, outlinePanel, dreamPanel],
+    [wordsPanel, portraitPanel, backgroundPanel, mattePanel, depthPanel, outlinePanel, dreamPanel],
     compositeVideoPath,
     { fps: job.fps, duration: audioDuration }
   )
 
-  const videoPath = await dynamicPath(job, input.take, 'video')
-  const videoWebmPath = await dynamicPath(job, input.take, 'video', 'webm')
-  await compress(compositeVideoPath, videoPath)
+  const finalVideoPath = await videoPath(job, `7-dreams/${input.take}/video`)
+  const videoWebmPath = await videoPath(job, `7-dreams/${input.take}/video`, 'webm')
+  await compress(compositeVideoPath, finalVideoPath)
   await compress(compositeVideoPath, videoWebmPath)
 
-  const videoSmallPath = await dynamicPath(job, input.take, 'video-small')
-  const videoSmallWebmPath = await dynamicPath(job, input.take, 'video-small', 'webm')
+  const videoSmallPath = await videoPath(job, `7-dreams/${input.take}/video-small`)
+  const videoSmallWebmPath = await videoPath(job, `7-dreams/${input.take}/video-small`, 'webm')
   await compress(compositeVideoPath, videoSmallPath, { half: true })
   await compress(compositeVideoPath, videoSmallWebmPath, { half: true })
 
-  const loopPath = await dynamicPath(job, input.take, 'loop')
+  const loopPath = await videoPath(job, `7-dreams/${input.take}/loop`)
   await execFileAsync('ffmpeg', [
     '-y',
     '-ss',
@@ -102,18 +111,19 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
     loopPath,
   ])
 
-  // Take-independent — only depends on the artwork panel, so it lives under
-  // static/ rather than dynamic/<take>/ even though compose() recomputes it
-  // on every call (cheap local resize, not worth caching separately).
-  const heroImagePath = path.join(staticDir, 'hero.jpg')
-  await sharp(await firstFrame(input.artworkFramesDir))
+  // Take-independent — only depends on the portrait panel, so it lives at
+  // the job root rather than under 7-dreams/<take>/, even though compose()
+  // recomputes it on every call (cheap local resize, not worth caching
+  // separately).
+  const heroImagePath = path.join(job.dir, 'hero.jpg')
+  await sharp(await firstFrame(input.portraitFramesDir))
     .resize(PANEL_SIZE, PANEL_SIZE)
     .jpeg({ quality: 85 })
     .toFile(heroImagePath)
 
   return {
     compositeVideoPath,
-    videoPath,
+    videoPath: finalVideoPath,
     videoWebmPath,
     videoSmallPath,
     videoSmallWebmPath,
@@ -122,24 +132,20 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
   }
 }
 
-/** Compiles a frame folder into a PANEL_SIZE² square panel video — every frame-based panel is already square, so this is a plain resize, no crop. Take-independent, so it's cached under static/ via jobVideoPath. `ext` must match the frame folder's actual format (alpha/matte stays png; everything else is jpg — see init.ts). */
-async function normalizeFramesPanel(job: Job, name: string, framesDir: string, ext: 'png' | 'jpg'): Promise<string> {
-  const out = await jobVideoPath(job, `panel-${name}`)
-  await compileFramesToVideo(framesDir, out, { fps: job.fps, scale: `${PANEL_SIZE}:${PANEL_SIZE}`, ext })
+/** Copies the fixed, shared words.mov into this job's own `1-words/` folder (if not already there), so panel 1 has a real per-job folder like every other panel even though its content is always identical. */
+async function ensureWordsPanel(job: Job): Promise<string> {
+  const out = path.join(job.dir, '1-words', 'words.mov')
+  if (!(await exists(out))) {
+    await mkdir(path.dirname(out), { recursive: true })
+    await copyFile(WORDS_VIDEO_PATH, out)
+  }
   return out
 }
 
-/**
- * The dream panel is now a per-frame folder like every other panel (see
- * `dream.ts` — flux-kontext-dev called once per kept frame, with the
- * stepped/held cadence already baked into the frame sequence itself), the
- * one difference being it's take-specific so its compiled video lives
- * under `dynamic/<take>/` rather than the shared `static/video/` every
- * other panel's compile is cached under.
- */
-async function normalizeDreamPanel(job: Job, take: string, framesDir: string): Promise<string> {
-  const out = await dynamicPath(job, take, 'panel-dream')
-  await compileFramesToVideo(framesDir, out, { fps: job.fps, scale: `${PANEL_SIZE}:${PANEL_SIZE}`, ext: 'jpg' })
+/** Compiles a frame folder into a PANEL_SIZE² square panel video — every frame-based panel is already square, so this is a plain resize, no crop. `panelDir` is the panel's own folder relative to the job root (e.g. `2-portrait`, or `7-dreams/<take>` for the one per-take panel) — its compiled video lands at `<panelDir>/video/panel.mov`. `ext` must match the frame folder's actual format (alpha/matte stays png; everything else is jpg — see init.ts). */
+async function normalizePanel(job: Job, panelDir: string, framesDir: string, ext: 'png' | 'jpg'): Promise<string> {
+  const out = await videoPath(job, `${panelDir}/video/panel`)
+  await compileFramesToVideo(framesDir, out, { fps: job.fps, scale: `${PANEL_SIZE}:${PANEL_SIZE}`, ext })
   return out
 }
 

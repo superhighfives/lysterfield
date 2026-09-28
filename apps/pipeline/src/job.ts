@@ -27,57 +27,34 @@ export async function loadJob(dir: string): Promise<Job> {
 }
 
 /**
- * Ensures `<job.dir>/static/frames/<name>/` exists and returns its path.
- * "static" because every per-frame intermediate (source, alpha, artwork,
- * background-plate, depth, outline, and their upscales) is independent of
- * which dream take eventually gets composited — generate once, reuse
- * across every take. See `dynamicPath` for the per-take counterpart.
+ * Ensures `<job.dir>/<relativePath>/` exists and returns its path. Callers
+ * pass the full path relative to the job root, e.g. `framesDir(job,
+ * 'source')`, `framesDir(job, '2-portrait/raw')`,
+ * `framesDir(job, `7-dreams/${take}/frames`)` — the numbered `N-<panel>/`
+ * prefix is what makes panels 1-6 naturally shared across every dream take
+ * (their paths don't mention a take at all) while panel 7 naturally isn't
+ * (its path always includes one), without this helper needing to know
+ * anything about "static" vs "dynamic" itself. See
+ * plans/done/ (pipeline-folder-numbering doc) for the full layout.
  */
-export async function framesDir(job: Job, name: string): Promise<string> {
-  const dir = path.join(job.dir, 'static', 'frames', name)
+export async function framesDir(job: Job, relativePath: string): Promise<string> {
+  const dir = path.join(job.dir, relativePath)
   await mkdir(dir, { recursive: true })
   return dir
 }
 
 /**
- * Ensures `<job.dir>/static/video/` exists and returns the path for
- * `<name>.<ext>` (default `mov`) — take-independent video intermediates:
- * `init`'s cropped/original/full source compiles, `matte`'s alpha-source,
- * and compose.ts's per-panel compiles (panel-artwork etc). See
- * `dynamicPath` for outputs that depend on which dream take is selected.
+ * Ensures the parent directory of `<job.dir>/<relativePath>.<ext>` exists
+ * and returns that full file path — same "caller specifies the full
+ * relative path" shape as `framesDir`, for compiled videos instead of
+ * frame folders (e.g. `videoPath(job, 'video/cropped')`,
+ * `videoPath(job, '2-portrait/video/panel')`,
+ * `videoPath(job, `7-dreams/${take}/composite`)`).
  */
-export async function videoPath(job: Job, name: string, ext = 'mov'): Promise<string> {
-  const dir = path.join(job.dir, 'static', 'video')
-  await mkdir(dir, { recursive: true })
-  return path.join(dir, `${name}.${ext}`)
-}
-
-/**
- * Ensures `<job.dir>/dynamic/<take>/` exists and returns the path for
- * `<name>.<ext>` (default `mov`) — everything downstream of one specific
- * dream generation: the raw clip itself, its normalized panel, the
- * composite, and every final export. `take` is a caller-chosen name (e.g.
- * `take-1`), so a scene can carry several dream attempts side by side
- * without re-running steps 1-6 or colliding with each other.
- */
-export async function dynamicPath(job: Job, take: string, name: string, ext = 'mov'): Promise<string> {
-  const dir = path.join(job.dir, 'dynamic', take)
-  await mkdir(dir, { recursive: true })
-  return path.join(dir, `${name}.${ext}`)
-}
-
-/**
- * Ensures `<job.dir>/dynamic/<take>/frames/<name>/` exists and returns its
- * path — the per-take counterpart of `framesDir`. Only the dream panel
- * needs this: unlike every other panel (generated once from the source
- * footage, shared across every take), dream frames are themselves the
- * thing that differs between takes, so they can't live under the
- * take-independent `static/frames/`.
- */
-export async function dynamicFramesDir(job: Job, take: string, name: string): Promise<string> {
-  const dir = path.join(job.dir, 'dynamic', take, 'frames', name)
-  await mkdir(dir, { recursive: true })
-  return dir
+export async function videoPath(job: Job, relativePath: string, ext = 'mov'): Promise<string> {
+  const fullPath = path.join(job.dir, `${relativePath}.${ext}`)
+  await mkdir(path.dirname(fullPath), { recursive: true })
+  return fullPath
 }
 
 /**

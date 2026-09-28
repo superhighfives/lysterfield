@@ -39,7 +39,7 @@ export async function outline(
   depthFramesDir: string,
   concurrency: number
 ): Promise<OutlineResult> {
-  const outputDir = await framesDir(job, 'outline')
+  const outputDir = await framesDir(job, '6-outline/frames')
 
   await forEachFrame(sourceFramesDir, outputDir, concurrency, async (inputPath, outputPath) => {
     const alphaPath = await siblingFramePath(inputPath, alphaFramesDir)

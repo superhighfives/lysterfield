@@ -32,7 +32,7 @@ idempotency check (skip-if-output-exists) guarding it first.
 
 `apps/client/src/materials/video-material.tsx` and `apps/client/src/views/main.tsx`
 read a fixed `uFrameTotal={7}` atlas at hardcoded indices: 1 = lyrics,
-2 = artwork, 3 = artwork background, 4 = matte, 5 = depth, 6 = outline,
+2 = portrait, 3 = portrait background, 4 = matte, 5 = depth, 6 = outline,
 7 = dream video. Don't reorder or resize the pipeline's composite output
 without updating both those files to match.
 

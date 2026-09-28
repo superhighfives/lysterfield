@@ -31,7 +31,7 @@ export async function depth(
   alphaFramesDir: string,
   concurrency: number
 ): Promise<DepthResult> {
-  const outputDir = await framesDir(job, 'depth')
+  const outputDir = await framesDir(job, '5-depth/frames')
 
   await forEachFrame(sourceFramesDir, outputDir, concurrency, async (inputPath, outputPath) => {
     const alphaPath = await siblingFramePath(inputPath, alphaFramesDir)

@@ -57,7 +57,7 @@ export async function init(jobDir: string, opts: InitOptions): Promise<InitResul
   const fps = opts.fps ?? 24
   const job = await createJob(jobDir, fps)
 
-  const croppedVideoPath = await videoPath(job, 'cropped')
+  const croppedVideoPath = await videoPath(job, 'video/cropped')
   if (!(await exists(croppedVideoPath))) {
     const args = ['-y']
     if (opts.offset !== undefined) args.push('-ss', String(opts.offset))
@@ -76,7 +76,7 @@ export async function init(jobDir: string, opts: InitOptions): Promise<InitResul
     await extractFrames(croppedVideoPath, sourceFramesDir, fps, 'jpg')
   }
 
-  const originalVideoPath = await videoPath(job, 'original')
+  const originalVideoPath = await videoPath(job, 'video/original')
   if (!(await exists(originalVideoPath))) {
     await compileFramesToVideo(sourceFramesDir, originalVideoPath, {
       fps,
@@ -86,7 +86,7 @@ export async function init(jobDir: string, opts: InitOptions): Promise<InitResul
     })
   }
 
-  const fullVideoPath = await videoPath(job, 'full')
+  const fullVideoPath = await videoPath(job, 'video/full')
   if (!(await exists(fullVideoPath))) {
     await compileFramesToVideo(sourceFramesDir, fullVideoPath, { fps, crf: opts.crf, ext: 'jpg' })
   }

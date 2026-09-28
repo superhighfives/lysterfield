@@ -10,19 +10,20 @@
  */
 export const MODELS = {
   /**
-   * Artwork step — went through nano-banana-2 and flux-kontext-dev after
-   * the original public `gwang-kim/diffusionclip` listing turned out to
-   * have an unreliable, sometimes multi-hour cold boot (phase 3's plan).
-   * Both replacements were cheaper/more reliable, but neither reproduced
-   * DiffusionCLIP's actual look — flux-kontext-dev in particular resisted
-   * being pushed toward a looser, more painterly style via prompting no
-   * matter how hard (see phase 5's plan). Landed back on DiffusionCLIP
-   * itself, now self-hosted at `superhighfives/diffusionclip`
-   * (`models/diffusionclip/`) instead of depending on the abandoned
-   * public listing — same real style, $0.02/call, and (with the
-   * deployment's min instances set to 1) no cold boot either.
+   * Portrait step (panel 2, previously called "artwork") — went through
+   * nano-banana-2 and flux-kontext-dev after the original public
+   * `gwang-kim/diffusionclip` listing turned out to have an unreliable,
+   * sometimes multi-hour cold boot (phase 3's plan). Both replacements were
+   * cheaper/more reliable, but neither reproduced DiffusionCLIP's actual
+   * look — flux-kontext-dev in particular resisted being pushed toward a
+   * looser, more painterly style via prompting no matter how hard (see
+   * phase 5's plan). Landed back on DiffusionCLIP itself, now self-hosted
+   * at `superhighfives/diffusionclip` (`models/diffusionclip/`) instead of
+   * depending on the abandoned public listing — same real style,
+   * $0.02/call, and (with the deployment's min instances set to 1) no cold
+   * boot either.
    */
-  artwork:
+  portrait:
     'superhighfives/diffusionclip:67ec618b47194f7d6776ebadd6985c851ecab8d9b2399cb335a0f86e773ce93d',
   zoedepth: 'cjwbw/zoedepth:6375723d97400d3ac7b88e3022b738bf6f433ae165c4a2acd1955eaa6b8fcb62',
   realEsrgan: 'cjwbw/real-esrgan:d0ee3d708c9b911f122a4ad90046c5d26a0293b99476d697f6bb7f2e251ce2d4',
@@ -62,8 +63,8 @@ export const MODELS = {
    * not a generic img2img model — reproduces the real pattern almost
    * exactly when called per real frame (not per scene): same pose,
    * composition, and background, fully repainted. This is the same model
-   * that lost the artwork-step comparison to DiffusionCLIP (see
-   * `artwork` above) — but that comparison was about matching
+   * that lost the portrait-step comparison to DiffusionCLIP (see
+   * `portrait` above) — but that comparison was about matching
    * DiffusionCLIP's specific watercolor look, which it resisted; here
    * there's no fixed look to match, so its actual strength (structure-
    * locked, prompt-driven reimagining) is exactly what's needed. Called

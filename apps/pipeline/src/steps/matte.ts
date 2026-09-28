@@ -15,7 +15,7 @@ export interface MatteResult {
  * (the model's default, "green-screen", is wrong for this pipeline).
  */
 export async function matte(job: Job, croppedVideoPath: string): Promise<MatteResult> {
-  const alphaVideoPath = await videoPath(job, 'alpha-source', 'mp4')
+  const alphaVideoPath = await videoPath(job, 'video/alpha-source', 'mp4')
   if (!(await exists(alphaVideoPath))) {
     await runModelToFile(
       MODELS.robustVideoMatting,
