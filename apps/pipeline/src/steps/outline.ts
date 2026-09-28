@@ -17,11 +17,20 @@ const SIZE = 1024
  * Pre: matte-cutout the source frame onto white (not transparent — this is
  * "erase everything outside the subject", same as the legacy `paste(...,
  * mask=alpha)` onto a white canvas), then soft-light blend that with the
- * matching depth-panel frame at 50% opacity, then brighten ×1.4 (legacy
- * also set contrast ×1.0 — a no-op, not ported). The model itself
+ * matching depth-panel frame at 50% opacity. The model itself
  * (`predict.py`) handles resizing to its 300×300 input size and rendering/
  * resizing the 1024×1024 grayscale output — nothing to do here after the
  * call.
+ *
+ * `other.py`'s remaining step — brighten ×1.4 (legacy also set contrast
+ * ×1.0, a no-op, not ported) — is NOT ported as a blind multiply. On
+ * well-lit real footage (bright sky, light-coloured clothing) that
+ * blindly blows already-bright pixels straight to 255: found live on a
+ * real clip where the shirt/torso region came back from the model as a
+ * blank void with no linework at all, because the "brightened" input sharp
+ * fed it had already clipped every fold and seam to flat white — confirmed
+ * by checking the actual pixel stats (mean ~245/255) before assuming the
+ * model itself was at fault. See `contrastStretchPersonPixels` for the fix.
  */
 export async function outline(
   job: Job,
@@ -38,11 +47,10 @@ export async function outline(
 
     const cutout = await compositeOnWhite(inputPath, alphaPath)
     const blended = await softLightBlend(cutout, depthPath, 0.5)
-    const brightened = await brighten(blended, 1.4)
 
     await runModelToFile(
       MODELS.outline,
-      { image: new File([new Uint8Array(brightened)], 'frame.png') },
+      { image: new File([new Uint8Array(blended)], 'frame.png') },
       outputPath,
       { jpegQuality: 90 }
     )
@@ -51,15 +59,38 @@ export async function outline(
   return { framesDir: outputDir }
 }
 
-/** Pastes `imagePath` onto a white SIZE×SIZE canvas using `maskPath` as the alpha. */
+/** Middle 96% (2nd-98th percentile) of person pixels stretched to fill 0-255. */
+const STRETCH_LOW_PERCENTILE = 0.02
+const STRETCH_HIGH_PERCENTILE = 0.98
+
+/**
+ * Pastes `imagePath` onto a white SIZE×SIZE canvas using `maskPath` as the
+ * alpha, after first contrast-stretching the subject's own pixels (not a
+ * blind brightness multiply — see this file's top comment). Computing the
+ * stretch's low/high bounds only from pixels *inside* the person mask
+ * matters: doing it after pasting onto white (or via a naive whole-frame
+ * auto-levels) sees a canvas that's already 0-255 just from the white
+ * padding, so there's nothing left to stretch and the subject's actual
+ * compressed midtones never get spread back out.
+ */
 async function compositeOnWhite(imagePath: string, maskPath: string): Promise<Buffer> {
   const { rgb, alpha } = await loadImageAndMaskRaw(imagePath, maskPath, SIZE)
+
+  const personValues: number[] = []
+  for (let i = 0; i < SIZE * SIZE; i++) {
+    if (alpha[i] > 128) personValues.push(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2])
+  }
+  personValues.sort((a, b) => a - b)
+  const lo = personValues[Math.floor(personValues.length * STRETCH_LOW_PERCENTILE)] ?? 0
+  const hi = personValues[Math.floor(personValues.length * STRETCH_HIGH_PERCENTILE)] ?? 255
+  const range = Math.max(1, hi - lo) // avoid divide-by-zero on a near-flat-colour subject
 
   const out = Buffer.alloc(SIZE * SIZE * 3)
   for (let i = 0; i < SIZE * SIZE; i++) {
     const a = alpha[i] / 255
     for (let c = 0; c < 3; c++) {
-      out[i * 3 + c] = Math.round(rgb[i * 3 + c] * a + 255 * (1 - a))
+      const stretched = Math.max(0, Math.min(255, ((rgb[i * 3 + c] - lo) / range) * 255))
+      out[i * 3 + c] = Math.round(stretched * a + 255 * (1 - a))
     }
   }
 
@@ -91,17 +122,6 @@ async function softLightBlend(basePng: Buffer, overlayPath: string, opacity: num
   }
 
   return sharp(out, { raw: { width: info.width, height: info.height, channels: info.channels } })
-    .png()
-    .toBuffer()
-}
-
-/** Multiplies every pixel by `factor`, clipped to 255 — matches PIL's `ImageEnhance.Brightness`. */
-async function brighten(png: Buffer, factor: number): Promise<Buffer> {
-  const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true })
-  for (let i = 0; i < data.length; i++) {
-    data[i] = Math.min(255, Math.round(data[i] * factor))
-  }
-  return sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } })
     .png()
     .toBuffer()
 }
