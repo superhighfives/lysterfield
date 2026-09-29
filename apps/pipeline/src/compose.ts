@@ -48,7 +48,7 @@ export interface ComposeResult {
   videoSmallWebmPath: string
   /** 5s loop clip cropped from the dream panel — apps/client's choose-screen asset. */
   loopPath: string
-  /** apps/client's choose-screen thumbnail, from the portrait panel's first frame. */
+  /** apps/client's choose-screen thumbnail, from the dream panel's first frame. */
   heroImagePath: string
 }
 
@@ -108,15 +108,18 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
     'yuv420p',
     '-crf',
     '28',
+    '-movflags',
+    '+faststart',
     loopPath,
   ])
 
-  // Take-independent — only depends on the portrait panel, so it lives at
-  // the job root rather than under 7-dreams/<take>/, even though compose()
-  // recomputes it on every call (cheap local resize, not worth caching
-  // separately).
-  const heroImagePath = path.join(job.dir, 'hero.jpg')
-  await sharp(await firstFrame(input.portraitFramesDir))
+  // Sourced from the dream panel, not the (take-independent) portrait
+  // panel — a job's takes can look completely different from each other
+  // (that's the whole point of a take), so the choose-screen thumbnail
+  // needs to show each take's own dream style, not one shared image every
+  // take of the same job would otherwise have in common.
+  const heroImagePath = await videoPath(job, `7-dreams/${input.take}/hero`, 'jpg')
+  await sharp(await firstFrame(input.dreamFramesDir))
     .resize(PANEL_SIZE, PANEL_SIZE)
     .jpeg({ quality: 85 })
     .toFile(heroImagePath)
@@ -189,7 +192,13 @@ async function compress(inputPath: string, outputPath: string, opts: { half?: bo
   if (isWebm) {
     args.push('-c:v', 'libvpx-vp9', '-pix_fmt', 'yuv420p', '-crf', '35', '-b:v', '0')
   } else {
-    args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '28')
+    // Without +faststart, ffmpeg's default mp4/mov muxer writes moov (the
+    // index a browser needs before it can start playback) after mdat — the
+    // full media payload. A browser without WebM support (Safari) falls
+    // back to this .mov source, and must then download the entire file
+    // before playback can begin at all: indistinguishable from "stuck at
+    // 0:00" on anything but a tiny clip.
+    args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '28', '-movflags', '+faststart')
   }
   args.push(outputPath)
   await execFileAsync('ffmpeg', args)
