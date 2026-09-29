@@ -42,8 +42,14 @@ function Root() {
   }, [videoState, dream])
 
   const handleReady = async () => {
-    const isMobile = (await handleDeviceOrientationPermissions()) as boolean
+    const orientationGranted = (await handleDeviceOrientationPermissions()) as boolean
     const isTouch = isTouchDevice() as boolean
+    // macOS Safari also implements DeviceOrientationEvent.requestPermission
+    // (and auto-resolves it 'granted', with no real sensor or prompt behind
+    // it) even though Macs have no orientation hardware — so the permission
+    // signal alone can't tell a MacBook from an iPhone. Requiring isTouch
+    // too rules that out, since a real touch-and-tilt phone satisfies both.
+    const isMobile = orientationGranted && isTouch
     setIsMobile(isMobile)
     setIsTouch(isTouch)
     console.log(`Accelerometer: ${isMobile} | Touch: ${isTouch}`)
