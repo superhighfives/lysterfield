@@ -31,7 +31,6 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const dream = useStore((state) => state.dream);
 	const setShowPlayhead = useStore((state) => state.setShowPlayhead);
 	const initialRotation = useStore((state) => state.initialRotation);
-	const polaroidVisible = useStore((state) => state.polaroidVisible);
 	const resetting = useStore((state) => state.resetting);
 	const isTooSlow = useStore((state) => state.isTooSlow);
 	const setIsTooSlow = useStore((state) => state.setIsTooSlow);
@@ -69,7 +68,8 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 		}
 
 		if (isMobile || isTouch) {
-			if (dotMaterial.current) dotMaterial.current.opacity = polaroidVisible;
+			if (dotMaterial.current)
+				dotMaterial.current.opacity = useStore.getState().polaroidVisible;
 		}
 
 		const pointer = useStore.getState().globalPointer;

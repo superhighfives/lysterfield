@@ -20,6 +20,14 @@ type GLTFResult = GLTF & {
   }
 }
 
+// Every Object_3/Object_4/Object_5 mesh below shares this same identity
+// transform — hoisted so the ~20 on-screen Polaroid instances in the
+// choose-screen carousel aren't each allocating three fresh arrays per
+// render.
+const rotation = [0, 0, 0]
+const position = [0, 0, 0]
+const scale = [1.0, 1.0, 1.0]
+
 const Polaroid = forwardRef<
   Group,
   ThreeElements['group'] & {
@@ -30,9 +38,6 @@ const Polaroid = forwardRef<
   const { nodes, materials } = useGLTF(
     '/models/polaroid.glb'
   ) as unknown as GLTFResult
-  const rotation = [0, 0, 0]
-  const position = [0, 0, 0]
-  const scale = [1.0, 1.0, 1.0]
 
   materials['Material.001'].transparent = true
 

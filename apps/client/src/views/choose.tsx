@@ -41,6 +41,9 @@ function Choose(props: ThreeElements['group']) {
   const dream = useStore((state) => state.dream)
   const setDream = useStore((state) => state.setDream)
   const setPolaroidVisible = useStore((state) => state.setPolaroidVisible)
+  const setPolaroidPillVisible = useStore(
+    (state) => state.setPolaroidPillVisible
+  )
 
   const titleVisible = useRef(false)
   const titleRef = useIntersect<Mesh>(
@@ -140,7 +143,19 @@ function Choose(props: ThreeElements['group']) {
       whichMaterial.current.opacity = nextWhichVisibility
     }
 
-    setPolaroidVisible(data.range(4 / 5, 0.3))
+    // `polaroidVisible` itself is read non-reactively (via `getState()`
+    // inside another component's own `useFrame`) — same family of fix as
+    // `globalPointer`/`px` above, this field just wasn't caught at the
+    // time. The two things that DO need a reactive update (Playhead's
+    // JSX, gating pointer-events/opacity on crossing the 0.3 threshold)
+    // only care about the boolean, which is written here only when it
+    // actually flips, not every frame.
+    const visibility = data.range(4 / 5, 0.3)
+    setPolaroidVisible(visibility)
+    const pillVisible = visibility > 0.3
+    if (useStore.getState().polaroidPillVisible !== pillVisible) {
+      setPolaroidPillVisible(pillVisible)
+    }
   })
 
   const welcome = useTexture('images/welcome.png')

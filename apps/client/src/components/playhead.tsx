@@ -41,7 +41,9 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const setResetInitialRotation = useStore(
       (state) => state.setResetInitialRotation
     )
-    const polaroidVisible = useStore((state) => state.polaroidVisible)
+    const polaroidPillVisible = useStore(
+      (state) => state.polaroidPillVisible
+    )
     const setResetting = useStore((state) => state.setResetting)
     const setSeeking = useStore((state) => state.setSeeking)
     const setVideoPlaying = useStore((state) => state.setVideoPlaying)
@@ -147,7 +149,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
         >
           <button
             className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 active:bg-black active:text-white flex items-center gap-2 shadow-xl transition-opacity duration-500 ${
-              showPlayhead && recalibrateMobile && polaroidVisible > 0.3
+              showPlayhead && recalibrateMobile && polaroidPillVisible
                 ? ''
                 : 'pointer-events-none opacity-0'
             }`}
@@ -159,7 +161,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
         </div>
         <div
           className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[34px] bg-white border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity xs:[--media-control-padding:4px] ${
-            showPlayhead && polaroidVisible > 0.3
+            showPlayhead && polaroidPillVisible
               ? ''
               : 'pointer-events-none opacity-0'
           }`}

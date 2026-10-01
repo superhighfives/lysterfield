@@ -12,7 +12,13 @@ export interface AppState {
   videoPlaying: boolean
   isMobile: boolean
   isTouch: boolean
+  /** Continuous 0-1 scroll-driven value, written every frame — read via
+   *  `getState()` inside a `useFrame`, never through the reactive
+   *  `useStore` hook (would re-render on every frame-sized change). */
   polaroidVisible: number
+  /** Derived `polaroidVisible > 0.3`, only written when it actually
+   *  flips — this is the one safe to subscribe to reactively. */
+  polaroidPillVisible: boolean
   ready: boolean
   showPlayhead: boolean
   initialRotation: [number, number, number]
@@ -29,6 +35,7 @@ export interface AppState {
   setIsMobile: (isMobile: boolean) => void
   setIsTouch: (isMobile: boolean) => void
   setPolaroidVisible: (polaroidVisible: number) => void
+  setPolaroidPillVisible: (polaroidPillVisible: boolean) => void
   setInitialRotation: (initialRotation: [number, number, number]) => void
   setResetInitialRotation: (resetInitialRotation: boolean) => void
   setGlobalPointer: (globalPointer: Vector2) => void
@@ -46,6 +53,7 @@ export const useStore = create<AppState>()((set) => ({
   isMobile: false,
   isTouch: false,
   polaroidVisible: 0,
+  polaroidPillVisible: false,
   ready: false,
   showPlayhead: false,
   initialRotation: [0, 0, 0],
@@ -70,6 +78,8 @@ export const useStore = create<AppState>()((set) => ({
   setIsTouch: (isTouch: boolean) => set(() => ({ isTouch })),
   setPolaroidVisible: (polaroidVisible: number) =>
     set(() => ({ polaroidVisible })),
+  setPolaroidPillVisible: (polaroidPillVisible: boolean) =>
+    set(() => ({ polaroidPillVisible })),
   setInitialRotation: (initialRotation: [number, number, number]) =>
     set(() => ({ initialRotation })),
   setResetInitialRotation: (resetInitialRotation: boolean) =>

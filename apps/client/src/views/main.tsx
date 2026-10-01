@@ -85,6 +85,14 @@ function Main(
   const timeRef = useRef(0)
   const idleOpacityRef = useRef(0)
   const polaroidVisibilityRef = useRef(0)
+  // Reused (mutated via `.set()`) rather than reallocated every frame —
+  // same reasoning as the refs above, just for the Vector2 this frame
+  // loop hands off to the shader uniforms. `pointerRelative` below can't
+  // get the same treatment: playhead.tsx's recalibration watcher detects
+  // movement via `state.globalPointer === prevState.globalPointer`
+  // reference-identity, which a mutated-in-place object would always
+  // satisfy, silently breaking it — that one needs a fresh Vector2.
+  const pointerPositionRef = useRef(new Vector2())
 
   const [{ scale }, scaleApi] = useSpring(() => ({
     scale: 0,
@@ -125,7 +133,7 @@ function Main(
       pointerY = MathUtils.lerp(1 - Math.sin(time / 2) / 8, pointerY + 1.0, 4.0)
     }
 
-    const pointerPosition = new Vector2(
+    const pointerPosition = pointerPositionRef.current.set(
       pointerX * state.size.width,
       pointerY * state.size.height
     )
