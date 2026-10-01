@@ -13,6 +13,13 @@ import { useGesture } from '@use-gesture/react'
 import { useStore } from '../store'
 import { Dream } from '../utils/types'
 
+// Per-frame lerp factors for the pointer tilt: the centre card eases at
+// TILT_EASE_NEAR, falling to TILT_EASE_FAR by TILT_STAGGER_CARDS card
+// widths out.
+const TILT_EASE_NEAR = 0.12
+const TILT_EASE_FAR = 0.02
+const TILT_STAGGER_CARDS = 5
+
 export default function Slider({
   items,
   isDragging,
@@ -182,6 +189,29 @@ export default function Slider({
 
   const { width: w } = useThree((state) => state.viewport)
 
+  // Each card also tilts toward the pointer on its own, inside the
+  // spring-driven group, easing at a rate that falls off with distance
+  // from the centre — so the front cards answer first and the rest follow
+  // in a ripple, instead of the whole row moving as one object with the
+  // camera's parallax.
+  const tiltRefs = useRef<Record<number, Object3D | null>>({})
+  useFrame((state) => {
+    const { x: pointerX, y: pointerY } = state.pointer
+    springs.forEach(({ position }, i) => {
+      const tilt = tiltRefs.current[i]
+      if (!tilt) return
+      const distance = Math.abs(position.get()[0]) / (width * TILT_STAGGER_CARDS)
+      const ease = MathUtils.lerp(
+        TILT_EASE_NEAR,
+        TILT_EASE_FAR,
+        MathUtils.clamp(distance, 0, 1)
+      )
+      tilt.rotation.x = MathUtils.lerp(tilt.rotation.x, -pointerY * 0.12, ease)
+      tilt.rotation.y = MathUtils.lerp(tilt.rotation.y, pointerX * 0.18, ease)
+      tilt.position.y = MathUtils.lerp(tilt.position.y, pointerY * 0.015, ease)
+    })
+  })
+
   return (
     <>
       {!isTouch ? (
@@ -202,9 +232,15 @@ export default function Slider({
             scale={scale as unknown as Vector3}
             rotation={rotation as unknown as Euler}
             key={i}
-            // eslint-disable-next-line react/no-children-prop
-            children={children(items[i], i)}
-          />
+          >
+            <group
+              ref={(el) => {
+                tiltRefs.current[i] = el
+              }}
+            >
+              {children(items[i], i)}
+            </group>
+          </animated.group>
         ))}
       </Center>
     </>

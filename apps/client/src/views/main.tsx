@@ -19,14 +19,21 @@ import { animated, config, useSpring } from '@react-spring/three'
 // eslint-disable-next-line import/named -- useIdle is a real export (confirmed at runtime); eslint-plugin-import's static resolver doesn't handle this package's minimal `exports` map correctly
 import { useIdle } from '@uidotdev/usehooks'
 
-// World units the avatar's depth-map relief pushes toward the camera at
-// full depth. Was effectively 0.094 (0.75 / 8) before the relief was
-// tapered to round off at the silhouette's edge — that taper is what
-// makes a stronger push read as a rounder figure rather than a thicker
-// slab, see video-material.tsx's vertex shader. Tuned by eye on
-// 20230808103741: 0.35 started smearing near features (a raised hand)
-// across the plane, 0.2 adds clear separation without that.
-const DEPTH_STRENGTH = 0.2
+// Avatar depth, see video-material.tsx's vertex shader. Tuned by eye on
+// 20230808103741, comparing side-on renders: the depth panel is too coarse
+// to push forward as-is (a head comes through as a flat plateau, which
+// extruded into a block on a pinched neck), so it's blurred across
+// DEPTH_SHAPE_RADIUS of the panel into rounded forms first, with a thin
+// DEPTH_EDGE_RADIUS roll-off at the matte's edge. Smaller blur radii
+// (0.05) brought the block-head back; 0.12 at strength 0.3 gave the most
+// depth while still reading as a head on shoulders.
+const DEPTH_STRENGTH = 0.3
+const DEPTH_SHAPE_RADIUS = 0.12
+const DEPTH_EDGE_RADIUS = 0.02
+// Unsharp-mask amount for the portrait panel. The softness is mostly at
+// source, so this firms up edges (hair, necklace) rather than adding
+// detail; 1.5 showed no halos, 1.2 leaves some margin.
+const AVATAR_SHARPEN = 1.2
 
 function Main(
   props: ThreeElements['group'] & {
@@ -245,7 +252,7 @@ function Main(
           scale={scale}
           name="avatar"
         >
-          <planeGeometry args={[1, 1, 500, 500]} />
+          <planeGeometry args={[1, 1, 256, 256]} />
           <videoMaterial
             ref={avatarMaterial}
             key={VideoMaterial.key}
@@ -259,6 +266,9 @@ function Main(
             uOpacity={1}
             uMaskIntensity={1}
             uDepthStrength={DEPTH_STRENGTH}
+            uShapeRadius={DEPTH_SHAPE_RADIUS}
+            uEdgeRadius={DEPTH_EDGE_RADIUS}
+            uSharpen={AVATAR_SHARPEN}
             uDark={dark}
           />
         </animated.mesh>

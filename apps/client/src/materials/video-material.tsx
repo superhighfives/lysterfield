@@ -21,13 +21,20 @@ const uniforms = {
   // How far the avatar's depth-map relief pushes toward the camera, in
   // world units at full depth (depth panel = 1.0) and full fade-in.
   uDepthStrength: 0,
+  // Panel-UV radii for the avatar's depth shaping: how far the depth map is
+  // blurred into rounded forms, and how wide the roll-off at the matte's
+  // edge is. See the vertex shader.
+  uShapeRadius: 0,
+  uEdgeRadius: 0,
+  // Unsharp-mask amount for the avatar's portrait (0 = off).
+  uSharpen: 0,
   // 0 = light, 1 = dark. Drives the intro/outro fade colour and the
   // background that uBackgroundMix blends toward.
   uDark: 0,
-  // Permanent blend of `image` toward the flat page background (white in
-  // light mode, black in dark mode) — 0 leaves the sampled colour alone.
-  // Only the lyrics mesh sets this, to knock its dream-video fill back so
-  // the text reads against either background.
+  // Permanent blend of `image` toward a flat colour that contrasts with
+  // the page (black in light mode, white in dark mode) — 0 leaves the
+  // sampled colour alone. Only the lyrics mesh sets this, so its
+  // dream-video fill reads against the page and polaroid in either mode.
   uBackgroundMix: 0,
 }
 
@@ -48,6 +55,8 @@ export const VideoMaterial = shaderMaterial(
     varying vec2 texCoord;
     uniform float uTime;
     uniform float uDepthStrength;
+    uniform float uShapeRadius;
+    uniform float uEdgeRadius;
 
     // Samples one panel of the 7-panel atlas, clamped (like the fragment
     // shader's localX) so a lookup never bleeds into the neighbouring panel.
@@ -56,21 +65,15 @@ export const VideoMaterial = shaderMaterial(
       return texture2D(uTexture, vec2((x + (panel - 1.0)) / uFrameTotal, clamp(uv.y, 0.0, 1.0))).r;
     }
 
-    // How far inside the silhouette this vertex sits, 0 at the matte's edge
-    // rising to 1 at EDGE_RADIUS (in panel UV) or further in. Approximated
-    // from the matte's average coverage over a 5x5 neighbourhood: coverage
-    // is ~0.5 right on the edge and 1.0 once the whole neighbourhood is
-    // inside the person.
-    const float EDGE_RADIUS = 0.06;
-    float insideness(vec2 uv) {
-      float coverage = 0.0;
+    // A panel's average over a 5x5 neighbourhood spanning +/-radius.
+    float blurPanel(float panel, vec2 uv, float radius) {
+      float sum = 0.0;
       for (int x = -2; x <= 2; x++) {
         for (int y = -2; y <= 2; y++) {
-          coverage += samplePanel(uFrameMask, uv + vec2(float(x), float(y)) * (EDGE_RADIUS / 2.0));
+          sum += samplePanel(panel, uv + vec2(float(x), float(y)) * (radius / 2.0));
         }
       }
-      coverage /= 25.0;
-      return clamp((coverage - 0.5) * 2.0, 0.0, 1.0);
+      return sum / 25.0;
     }
 
     void main(){
@@ -84,15 +87,25 @@ export const VideoMaterial = shaderMaterial(
           // forward — a flat offset, unaffected by the matte.
           float lean = (0.1875 * vUv.y) * fadeAmount + 0.05;
 
-          // The depth map's relief is shaped by a quarter-circle profile
-          // over distance-from-edge, so the silhouette curves away like a
-          // real head and shoulders instead of the whole cut-out pushing
-          // forward as one slab. Outside the matte the relief is 0, which
-          // also drops the depth model's corner flutter on the hidden
-          // part of the plane.
-          float t = 1.0 - insideness(vUv);
-          float profile = sqrt(1.0 - t * t);
-          float relief = samplePanel(uFrameDepth, vUv) * profile * uDepthStrength * fadeAmount;
+          // The depth panel is coarse — bright is near, but a head comes
+          // through as one flat plateau, and pushing that forward as-is
+          // extrudes the head like a block. Blurring it heavily turns each
+          // plateau into a rounded hill (and blends the neck smoothly into
+          // the shoulders, rather than pinching it), which reads as a
+          // head's actual shape.
+          float shape = blurPanel(uFrameDepth, vUv, uShapeRadius);
+
+          // Then a thin quarter-circle roll-off right at the matte's edge,
+          // so the silhouette curves away rather than ending in a cliff.
+          // Matte coverage over the neighbourhood is ~0.5 on the edge and
+          // 1.0 once fully inside, remapped to 0..1. Outside the matte the
+          // relief is 0, which also drops the depth model's corner
+          // flutter on the hidden part of the plane.
+          float inside = clamp((blurPanel(uFrameMask, vUv, uEdgeRadius) - 0.5) * 2.0, 0.0, 1.0);
+          float t = 1.0 - inside;
+          float rolloff = sqrt(1.0 - t * t);
+
+          float relief = shape * rolloff * uDepthStrength * fadeAmount;
 
           intensity = lean + relief;
         }
@@ -120,6 +133,8 @@ export const VideoMaterial = shaderMaterial(
     uniform float uIdle;
     uniform float uDark;
     uniform float uBackgroundMix;
+    uniform float uSharpen;
+    const float SHARPEN_TEXELS = 1.5;
 
     vec3 blendMultiply(vec3 base, vec3 blend) {
       return base*blend;
@@ -187,6 +202,22 @@ export const VideoMaterial = shaderMaterial(
       float localX = clamp(vUv.x - offsetX, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
 
       vec4 image = texture2D(uTexture, vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, uInvert == 1.0 ? 1.0 - vUv.y : vUv.y - offsetY));
+
+      // Unsharp mask: push each pixel away from the average of its four
+      // neighbours (SHARPEN_TEXELS atlas texels away). The portrait panel
+      // is soft at source — stylised, then VP9-compressed — so this
+      // recovers some edge definition rather than adding real detail.
+      if(uSharpen != 0.0) {
+        vec2 uv = vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, vUv.y - offsetY);
+        vec2 texel = SHARPEN_TEXELS / vec2(textureSize(uTexture, 0));
+        vec3 blur = (
+          texture2D(uTexture, uv + vec2(texel.x, 0.0)).rgb +
+          texture2D(uTexture, uv - vec2(texel.x, 0.0)).rgb +
+          texture2D(uTexture, uv + vec2(0.0, texel.y)).rgb +
+          texture2D(uTexture, uv - vec2(0.0, texel.y)).rgb
+        ) / 4.0;
+        image.rgb = clamp(image.rgb + (image.rgb - blur) * uSharpen, 0.0, 1.0);
+      }
       vec4 mask = texture2D(uTexture, vec2((localX + (uFrameMask - 1.0)) / uFrameTotal, vUv.y - offsetY));
 
       float mixValue = uMaskIntensity;
@@ -204,7 +235,7 @@ export const VideoMaterial = shaderMaterial(
       vec4 white = vec4(vec3(color), 1.0);
 
       if(uBackgroundMix != 0.0) {
-        vec3 background = mix(vec3(1.0), vec3(0.0), uDark);
+        vec3 background = mix(vec3(0.0), vec3(1.0), uDark);
         image = vec4(mix(image.rgb, background, uBackgroundMix), image.a);
       }
 
