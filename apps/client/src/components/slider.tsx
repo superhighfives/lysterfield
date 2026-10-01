@@ -19,6 +19,12 @@ import { Dream } from '../utils/types'
 const TILT_EASE_NEAR = 0.12
 const TILT_EASE_FAR = 0.02
 const TILT_STAGGER_CARDS = 5
+// Card float, in slider units (one card is `width` = 0.3 wide): how far a
+// card drifts toward the pointer at the screen edge (scaled per card by
+// 0.6-1.4x), and the amplitude of its idle bob.
+const FLOAT_DRIFT_X = 0.035
+const FLOAT_DRIFT_Y = 0.03
+const FLOAT_BOB = 0.008
 
 export default function Slider({
   items,
@@ -189,14 +195,18 @@ export default function Slider({
 
   const { width: w } = useThree((state) => state.viewport)
 
-  // Each card also tilts toward the pointer on its own, inside the
-  // spring-driven group, easing at a rate that falls off with distance
-  // from the centre — so the front cards answer first and the rest follow
-  // in a ripple, instead of the whole row moving as one object with the
-  // camera's parallax.
+  // Each card also floats on its own, inside the spring-driven group, so
+  // the row reads as separate cards drifting rather than one rigid object
+  // pivoting with the camera's parallax:
+  // - it tilts and drifts (x/y) toward the pointer, by its own amount,
+  //   easing at a rate that falls off with distance from the centre — the
+  //   front cards answer first and the rest follow in a ripple;
+  // - and it bobs gently on its own, at its own speed and phase, so the
+  //   cards keep moving independently even with the pointer still.
   const tiltRefs = useRef<Record<number, Object3D | null>>({})
   useFrame((state) => {
     const { x: pointerX, y: pointerY } = state.pointer
+    const time = state.clock.elapsedTime
     springs.forEach(({ position }, i) => {
       const tilt = tiltRefs.current[i]
       if (!tilt) return
@@ -206,9 +216,25 @@ export default function Slider({
         TILT_EASE_FAR,
         MathUtils.clamp(distance, 0, 1)
       )
-      tilt.rotation.x = MathUtils.lerp(tilt.rotation.x, -pointerY * 0.12, ease)
-      tilt.rotation.y = MathUtils.lerp(tilt.rotation.y, pointerX * 0.18, ease)
-      tilt.position.y = MathUtils.lerp(tilt.position.y, pointerY * 0.015, ease)
+      // Stable per-card pseudo-random values in [0, 1) (golden-ratio
+      // sequence), so no two neighbours drift or bob in step.
+      const seedA = (i * 0.618034) % 1
+      const seedB = (i * 0.414214 + 0.5) % 1
+      const reach = 0.6 + seedA * 0.8
+      const bobSpeed = 0.5 + seedB * 0.5
+      const bobPhase = seedA * Math.PI * 2
+
+      const driftX = pointerX * FLOAT_DRIFT_X * reach
+      const driftY =
+        pointerY * FLOAT_DRIFT_Y * reach +
+        Math.sin(time * bobSpeed + bobPhase) * FLOAT_BOB
+      const driftZ = Math.cos(time * bobSpeed * 0.7 + bobPhase) * FLOAT_BOB
+
+      tilt.rotation.x = MathUtils.lerp(tilt.rotation.x, -pointerY * 0.12 * reach, ease)
+      tilt.rotation.y = MathUtils.lerp(tilt.rotation.y, pointerX * 0.18 * reach, ease)
+      tilt.position.x = MathUtils.lerp(tilt.position.x, driftX, ease)
+      tilt.position.y = MathUtils.lerp(tilt.position.y, driftY, ease)
+      tilt.position.z = MathUtils.lerp(tilt.position.z, driftZ, ease)
     })
   })
 

@@ -65,20 +65,25 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 		}
 
 		if (cameraRef && !isMobile && !isTouch) {
+			// Halved on the choose screen (pan and dolly both): there, the
+			// carousel's cards float toward the pointer individually (see
+			// slider.tsx), and full camera parallax on top made the whole row
+			// swing and zoom as one rigid object.
+			const parallax = dream ? 1 : 0.5;
 			cameraRef.position.x = MathUtils.lerp(
 				cameraRef.position.x,
-				-state.pointer.x / 8,
+				(-state.pointer.x / 8) * parallax,
 				0.05,
 			);
 			cameraRef.position.y = MathUtils.lerp(
 				cameraRef.position.y,
-				-state.pointer.y / 8,
+				(-state.pointer.y / 8) * parallax,
 				0.05,
 			);
 
 			cameraRef.position.z = MathUtils.lerp(
 				cameraRef.position.z,
-				CAMERA_Z - state.pointer.y / 4,
+				CAMERA_Z - (state.pointer.y / 4) * parallax,
 				0.01,
 			);
 		}

@@ -397,11 +397,23 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
 - **Charcoal polaroids.** The frame materials are a white paper texture
   times `color`. Dark mode sets `#2b2826` on the three frame materials,
   which useGLTF shares across every instance; the paper grain survives.
-- **Staggered carousel tilt.** `Slider` wraps each card's contents in an
-  inner group that lerps toward a pointer-driven tilt. The lerp factor
-  falls from 0.12 at the centre to 0.02 five card-widths out, so motion
-  ripples outward. The camera's whole-scene parallax is unchanged; this
-  sits on top of it.
+- **Independent card float.** The review said the carousel moved "like a
+  single stick moving from a central point" rather than 20 floating
+  polaroids.
+  - `Slider` wraps each card's contents in an inner group. That group
+    tilts and drifts in x/y toward the pointer by its own amount (0.6-1.4×,
+    from a golden-ratio per-index seed).
+  - Each card also bobs on its own, in y and z, at its own speed and
+    phase, so cards keep moving independently with the pointer still.
+  - The lerp factor falls from 0.12 at the centre to 0.02 five
+    card-widths out, so the motion ripples outward.
+  - Half the rigid feel came from the camera: its pointer pan *and* its
+    dolly (pointer Y zooms the whole scene) moved the row as one. Both
+    are now halved while no dream is selected; the player keeps full
+    parallax.
+  - Verified by diffing two frames 1.5s apart with the pointer still and
+    the carousel frozen: each card's outline moved by a different amount
+    and direction.
 
 ## Verified
 
