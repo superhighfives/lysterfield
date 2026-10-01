@@ -96,9 +96,30 @@ a worktree at the pre-migration commit (`bece8e8`: fiber 8.13.5/drei
   via responsive Tailwind classes — the two-row mobile layout is
   untouched, since no mobile reference exists yet (see open question
   below).
-- General impression: "everything feels very janky and not smooth" —
-  likely partly *was* the concrete bugs above (now fixed), but still
-  worth a dedicated pass to see what's left.
+- **General "janky/not smooth" impression — dedicated pass done (commit
+  `770ac72`).** Code-reviewed `scene.tsx`, `choose.tsx`, `main.tsx`,
+  `playhead.tsx`, `slider.tsx`, `polaroid.tsx` for the same class of
+  per-frame-re-render/allocation bugs this codebase already fixed
+  elsewhere (see the `globalPointer`/`px`/`timeRef` comments). Found and
+  fixed one real instance that was missed: `polaroidVisible` was written
+  to the zustand store every frame from `choose.tsx`'s `useFrame` and
+  read *reactively* by both `Scene` and `Playhead`, re-rendering each
+  60x/sec during any scroll — `Playhead` in particular is a real DOM
+  tree (MediaController + every button/tooltip), so this was likely the
+  single biggest remaining jank source. Fixed by splitting it: `Scene`
+  now reads the continuous value non-reactively via `getState()` inside
+  its own `useFrame`; `Playhead` subscribes to a new derived
+  `polaroidPillVisible` boolean that's only written when it actually
+  crosses the 0.3 threshold. Also fixed a smaller per-frame Vector2
+  allocation in `main.tsx` (reused via `.set()` rather than `new
+  Vector2()` each frame — but *not* for `globalPointer` itself, which
+  `playhead.tsx`'s recalibration watcher depends on getting a fresh
+  reference every frame) and hoisted `Polaroid`'s static transform
+  arrays out of render. `slider.tsx`'s spring/drag handling and the
+  pervasive `config.molasses` easing were reviewed and are deliberate,
+  not bugs — `molasses` is slow by design (the "dreamy" feel), so if
+  the app still reads as sluggish rather than stuttery after this,
+  that's a design choice to revisit, not a performance bug to fix.
 
 ## Tasks
 
@@ -116,11 +137,12 @@ a worktree at the pre-migration commit (`bece8e8`: fiber 8.13.5/drei
       No fix needed.
 - [x] Match the playhead bar's height/proportions exactly to the reference
       design (commit `14f08c8`, desktop/`xs:` only).
-- [ ] Once the above are fixed, do a dedicated pass on the general
-      "janky/not smooth" feeling — identify specific remaining stutter/jank
-      sources (spring configs, scroll damping, frame drops) rather than
-      assuming it's fully explained by the bugs above.
-- [ ] Re-verify against the live production reference after each fix.
+- [x] Once the above are fixed, do a dedicated pass on the general
+      "janky/not smooth" feeling (commit `770ac72`).
+- [ ] Re-verify against the live production reference after each fix —
+      not yet done; production still hasn't been redeployed since the
+      React 19 migration (`b878890`), so there's nothing current to
+      compare against yet. Needs a `bun run deploy`/`deploy-prod` first.
 - [ ] Move this doc to `plans/done/` once resolved and confirmed.
 
 ## Open questions
