@@ -35,76 +35,84 @@ production is pre-migration.
 - `Choose`/`Slider`'s `useTexture`-during-render React 19 console warning
   (commit `ec35641`)
 
-**Zoom/scale regression — not yet root-caused.** Side-by-side screenshots
-at matching aspect ratios (~1.67–1.70) show the choose-screen polaroid
-carousel rendering roughly **1.4–1.5x larger** locally than on the live
-site — noticeably fewer, bigger cards fit the same viewport. Investigated
-so far:
-- `scene.tsx`'s camera setup (`fov={50}`, `CAMERA_Z=1.5`,
-  `zoom={w >= 1 ? 1 : w}`) is **byte-for-byte unchanged** since before
-  `b878890` (confirmed via `git show b878890 -- .../scene.tsx` — only
-  mechanical changes: `ThreeEvent` import, ref-init-to-null, the
-  `MediaReadyState` → native-constant swap). So this isn't a deliberate
-  code change; it's most likely a version-level behavior change in how
-  `@react-three/fiber`/`drei`/`three` compute viewport/camera/resize.
-- Ruled out **aspect ratio** as the explanation — both reference
-  screenshots are close enough (1.669 vs 1.699) that this alone can't
-  produce a 1.4–1.5x difference.
-- Ruled out (or at least: insufficient alone) the **pointer-driven camera-Z
-  parallax** in `scene.tsx`'s `useFrame` (camera moves closer/further based
-  on mouse Y position) — tested directly via synthetic `pointermove` events
-  in a live dev session; even at an extreme cursor position the formula
-  (`CAMERA_Z - pointer.y/4`) only accounts for ~13% distance change, far
-  short of the observed ~45% size difference. Real, but not the main cause.
-- Not yet tried: actually diffing `@react-three/fiber`/`drei`'s
-  viewport/resize computation between the pinned versions and whatever
-  production is running (would need the pre-migration lockfile in a
-  worktree to compare against directly, rather than reasoning about it from
-  changelogs).
+**Zoom/scale regression — resolved, was a comparison artifact, not a
+real regression.** Root-caused by diffing actual runtime numbers between
+a worktree at the pre-migration commit (`bece8e8`: fiber 8.13.5/drei
+9.79.3/three 0.154) and current `main` (fiber 9.7.0/drei 10.7.8/three
+0.170), both instrumented with temporary debug logging:
+- `state.viewport.width/height`, the custom camera's `zoom`/`fov`/`posZ`,
+  and the canvas buffer/CSS pixel dimensions were all **identical**
+  between the two versions at matched window size.
+- Screenshots taken at the **same absolute window size** (1280×800) are
+  visually pixel-identical between old and new — no 1.4–1.5x discrepancy
+  reproduces.
+- The original "1.4–1.5x larger" observation was a comparison artifact:
+  the two reference screenshots were checked for matching *aspect ratio*
+  but not matching *absolute window size*, and this scene has a fixed
+  world-space FOV with no DPR/size-based auto-fit — so absolute on-screen
+  size of 3D content scales directly with window pixel dimensions, by
+  design, in both versions. One browser tab sized 1600×960 next to
+  another at 1280×800 (similar aspect ratio, different absolute size)
+  reproduces the exact illusion.
+- No code change made — `scene.tsx` is unchanged.
 
-**New issues reported (2026-09-30), not yet investigated:**
-- **Playhead fades out unexpectedly** — screenshot shows the lyrics/intro
-  text with a completely blank white/yellow-bordered pill beneath it (no
-  icons, no timestamp, nothing rendered inside). This looks like the same
-  shape as the earlier "blank pill" symptom the `useTexture.preload` fix
-  (commit `ec35641`) addressed, but that fix was specifically for the
-  Choose/Slider texture-loading path — this is a different trigger/moment
-  (during the lyrics intro, not the choose screen) and needs its own
-  reproduction + diagnosis.
-- **Weird shadow on the playhead's hover time-preview text** — screenshot
-  shows the scrub bar's hover/preview time (`MediaPreviewTimeDisplay`,
-  e.g. "1:09") rendering with an odd blurred gray halo/box behind it,
-  floating above the real elapsed-time text ("1:01") and slider.
-- **No audio** during playback.
-- **Playhead bar height doesn't match the reference design** — a
-  side-by-side shows the reference (target) bar noticeably slimmer/shorter
-  than ours; asked to mimic it exactly rather than approximate.
+**New issues reported (2026-09-30):**
+- **Playhead fades out unexpectedly — fixed (commit `6934b3c`).**
+  Root cause: media-chrome's `<media-controller>` auto-hides every
+  slotted control (opacity 0) after 2s of pointer inactivity during
+  playback — a `userinactive` host attribute drives a CSS rule meant for
+  overlay-on-video controls, which isn't our use case (a persistent pill
+  below the video). Confirmed live: `userinactive` was present and every
+  control's computed opacity was 0 with the pointer idle during playback,
+  exactly matching the reported blank pill. Fixed by adding the
+  `noAutohide` prop to `<MediaController>`. Unrelated to the earlier
+  `useTexture.preload` choose-screen fix.
+- **Weird shadow on the playhead's hover time-preview text — fixed
+  (commit `6934b3c`).** Root cause: `media-time-range`'s default CSS
+  applies `text-shadow: 0 0 4px rgb(0 0 0 / .75)` to the preview time via
+  `--media-preview-time-text-shadow`, intended for contrast over a video
+  thumbnail background. Never overridden against our opaque white pill,
+  so it rendered as a stray blurred halo. Fixed by setting that custom
+  property to `none`.
+- **No audio — not a bug, confirmed working as intended.** The `<video>`
+  in `playhead.tsx` is deliberately `muted` only when
+  `location.hostname` is `localhost`/`127.0.0.1` (dev-safety, pre-dating
+  this phase). Confirmed live on a local dev session: `video.muted` was
+  `true` with `hostname === "localhost"`, fully explaining silent
+  playback there. Confirmed the composed media itself has real audio
+  tracks (`ffprobe` on an existing composed dream: `aac` in `.mov`,
+  `opus` in `.webm`), and the pipeline's `compress()` step doesn't strip
+  audio (no `-an`/explicit `-c:a`, so ffmpeg's default stream selection
+  carries it through). On any non-localhost hostname (including
+  production) `muted` is `false`. No code change made.
+- **Playhead bar height doesn't match the reference design — blocked on
+  reference image.** A side-by-side shows the reference (target) bar
+  noticeably slimmer/shorter than ours; asked to mimic it exactly rather
+  than approximate. The reference screenshot from the original
+  side-by-side session wasn't saved to disk and isn't available in this
+  session — need the user to supply it (or exact target dimensions)
+  before this can be done precisely rather than guessed.
 - General impression: "everything feels very janky and not smooth" —
-  likely partly *is* the concrete bugs above, but worth a dedicated pass
-  once those are fixed to see what's left.
+  likely partly *was* the concrete bugs above (now fixed), but still
+  worth a dedicated pass once the height fix lands to see what's left.
 
 ## Tasks
 
-- [ ] Root-cause the camera zoom/scale regression — bisect whether it's
-      `@react-three/fiber` v9's viewport computation, `drei` v10, or
-      `three` 0.170's resize/camera behavior. Comparing against the actual
-      pre-migration dependency set (e.g. a worktree checked out before
-      `b878890`) will likely be faster than reasoning from changelogs alone.
-- [ ] Fix the zoom to match production's scale — either by recalibrating
-      `fov`/`CAMERA_Z`/the `zoom` formula once the mechanism is understood,
-      or by finding and restoring whatever implicit behavior changed.
-- [ ] Reproduce and fix the playhead fade-out — find what's actually
-      driving it to render blank (likely `showPlayhead`/opacity state, but
-      confirm rather than assume given it's a different moment than the
-      choose-screen texture-loading issue already fixed).
-- [ ] Fix the hover time-preview shadow/halo artifact on
-      `MediaTimeRange`'s preview slot.
-- [ ] Investigate and fix missing audio — check the `<video>` element's
-      `muted` logic (currently forced true on localhost — confirm this
-      isn't also somehow true in the reported case), whether the composed
-      output actually has an audio track, and autoplay-policy interactions.
+- [x] Root-cause the camera zoom/scale regression — confirmed a
+      comparison artifact (mismatched window sizes between reference
+      screenshots), not a library-level regression. No fix needed.
+- [x] ~~Fix the zoom to match production's scale~~ — n/a, nothing was
+      actually wrong.
+- [x] Reproduce and fix the playhead fade-out — was media-chrome's
+      autohide-on-inactivity; fixed via `noAutohide` (commit `6934b3c`).
+- [x] Fix the hover time-preview shadow/halo artifact on
+      `MediaTimeRange`'s preview slot (commit `6934b3c`).
+- [x] Investigate missing audio — confirmed working as intended
+      (localhost-only dev mute, composed output has real audio tracks).
+      No fix needed.
 - [ ] Match the playhead bar's height/proportions exactly to the reference
-      design.
+      design. **Blocked**: need the reference screenshot/dimensions from
+      the user — not available in this session.
 - [ ] Once the above are fixed, do a dedicated pass on the general
       "janky/not smooth" feeling — identify specific remaining stutter/jank
       sources (spring configs, scroll damping, frame drops) rather than
@@ -114,12 +122,5 @@ so far:
 
 ## Open questions
 
-- Is the zoom regression best fixed by recalibrating our own camera formula
-  empirically (faster, but papers over an unexplained library behavior
-  change), or by fully root-causing the library-level change first (slower,
-  more correct)?
 - Does the height/proportions fix apply to the mobile (`xs:`) breakpoint
   too, or just desktop?
-- Is "no audio" reproducible in every browser / for every dream, or does it
-  depend on autoplay policy (first interaction required to unmute) in a way
-  that's environment-specific rather than a real bug?
