@@ -38,11 +38,3 @@ export function applyColorScheme(scheme: ColorScheme) {
   root.classList.toggle('dark', scheme === 'dark')
   root.style.colorScheme = scheme
 }
-
-/** Flips whichever scheme is showing. Flipping back to the system's own
- *  scheme stores 'system' rather than pinning it, so the page goes back to
- *  following the OS setting — the toggle never needs a third state. */
-export function toggledThemePreference(current: ColorScheme): ThemePreference {
-  const next: ColorScheme = current === 'dark' ? 'light' : 'dark'
-  return next === resolveColorScheme('system') ? 'system' : next
-}

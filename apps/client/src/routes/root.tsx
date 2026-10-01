@@ -85,8 +85,8 @@ function Root() {
 
   return (
     <>
-      <div className="fixed z-10 top-1 right-1 flex gap-1 font-sans text-sm">
-        <ThemeToggle className={linkClassName} />
+      <div className="fixed z-10 top-1 right-1 flex items-center gap-1 font-sans text-sm">
+        <ThemeToggle />
         <a href="/about" className={linkClassName}>
           <FileText />
           About

@@ -44,6 +44,9 @@ const invertInk = (shader: { fragmentShader: string }) => {
   )
 }
 
+const CAROUSEL_REFERENCE_HEIGHT = 900
+const CAROUSEL_MIN_SCALE = 0.6
+
 function Choose(props: ThreeElements['group']) {
   const collection = useStore((state) => state.collection)
   const isMobile = useStore((state) => state.isMobile)
@@ -101,6 +104,20 @@ function Choose(props: ThreeElements['group']) {
   }, [titleVisible])
 
   const { height: h } = useThree((state) => state.viewport)
+
+  // The carousel is sized in world units, which makes it a fixed share of
+  // the canvas height — as tall a share on a big external monitor as on a
+  // laptop, where it reads as enormous. Past CAROUSEL_REFERENCE_HEIGHT CSS
+  // pixels of canvas, it's scaled down to hold roughly that on-screen size.
+  // Applied to the group *around* Slider, not inside it: drei's <Center>
+  // in Slider measures in its own local space, so an ancestor's scale
+  // doesn't disturb the offset it bakes in at mount.
+  const canvasHeight = useThree((state) => state.size.height)
+  const carouselScale = MathUtils.clamp(
+    CAROUSEL_REFERENCE_HEIGHT / canvasHeight,
+    CAROUSEL_MIN_SCALE,
+    1
+  )
 
   const data = useScroll()
   // These all used to be React state, recomputed every frame via useFrame —
@@ -280,7 +297,10 @@ function Choose(props: ThreeElements['group']) {
           map={which}
         />
       </mesh>
-      <animated.group position={polaroidPosition as unknown as Vector3}>
+      <animated.group
+        position={polaroidPosition as unknown as Vector3}
+        scale={carouselScale}
+      >
         <Slider
           items={doubledCollection}
           isDragging={isDragging}
