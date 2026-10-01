@@ -85,16 +85,20 @@ a worktree at the pre-migration commit (`bece8e8`: fiber 8.13.5/drei
   audio (no `-an`/explicit `-c:a`, so ffmpeg's default stream selection
   carries it through). On any non-localhost hostname (including
   production) `muted` is `false`. No code change made.
-- **Playhead bar height doesn't match the reference design — blocked on
-  reference image.** A side-by-side shows the reference (target) bar
-  noticeably slimmer/shorter than ours; asked to mimic it exactly rather
-  than approximate. The reference screenshot from the original
-  side-by-side session wasn't saved to disk and isn't available in this
-  session — need the user to supply it (or exact target dimensions)
-  before this can be done precisely rather than guessed.
+- **Playhead bar height doesn't match the reference design — fixed
+  (commit `14f08c8`).** User supplied the reference screenshot. Measured
+  it precisely (pixel-analyzed the yellow border/thumb/track against a
+  known-matching `max-w-[400px]` width to confirm a 2x DPR capture):
+  target pill is exactly 400×34 CSS px, vs. our previous 400×54 — track
+  (`h-2`) and thumb (`w-4 h-4`) sizes were already an exact match, so
+  only the pill height, icon size (20px→16px), and button/row padding
+  needed to shrink. Scoped to the `xs:` (one-row desktop) breakpoint only
+  via responsive Tailwind classes — the two-row mobile layout is
+  untouched, since no mobile reference exists yet (see open question
+  below).
 - General impression: "everything feels very janky and not smooth" —
   likely partly *was* the concrete bugs above (now fixed), but still
-  worth a dedicated pass once the height fix lands to see what's left.
+  worth a dedicated pass to see what's left.
 
 ## Tasks
 
@@ -110,9 +114,8 @@ a worktree at the pre-migration commit (`bece8e8`: fiber 8.13.5/drei
 - [x] Investigate missing audio — confirmed working as intended
       (localhost-only dev mute, composed output has real audio tracks).
       No fix needed.
-- [ ] Match the playhead bar's height/proportions exactly to the reference
-      design. **Blocked**: need the reference screenshot/dimensions from
-      the user — not available in this session.
+- [x] Match the playhead bar's height/proportions exactly to the reference
+      design (commit `14f08c8`, desktop/`xs:` only).
 - [ ] Once the above are fixed, do a dedicated pass on the general
       "janky/not smooth" feeling — identify specific remaining stutter/jank
       sources (spring configs, scroll damping, frame drops) rather than
