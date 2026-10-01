@@ -21,6 +21,11 @@ per-step Replicate outputs) are generated, not source. They're already
 gitignored in `apps/client`; keep the same rule for anything `apps/pipeline`
 writes.
 
+`apps/pipeline/.jobs` is shared across git worktrees: `.githooks/post-checkout`
+symlinks a new worktree's copy to the main checkout's on `git worktree add`.
+It needs `git config core.hooksPath .githooks` set once per clone. For a
+worktree that already exists, run `.githooks/post-checkout` from inside it.
+
 ## Replicate calls cost money
 
 Pipeline steps run over source video at up to 60fps and can mean thousands of

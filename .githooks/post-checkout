@@ -1,0 +1,24 @@
+#!/bin/sh
+# Shares apps/pipeline/.jobs across all worktrees: in a linked worktree,
+# symlink it to the main checkout's copy so pipeline outputs (and the
+# skip-if-output-exists checks guarding Replicate calls) aren't duplicated.
+# Runs automatically on `git worktree add`; safe to run by hand in an
+# existing worktree.
+
+top=$(git rev-parse --show-toplevel) || exit 0
+common=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
+main=$(dirname "$common")
+
+[ "$(cd "$top" && pwd -P)" = "$main" ] && exit 0
+
+link="$top/apps/pipeline/.jobs"
+target="$main/apps/pipeline/.jobs"
+
+[ -L "$link" ] && exit 0
+if [ -e "$link" ]; then
+  echo "post-checkout: $link exists and isn't a symlink; leaving it alone" >&2
+  exit 0
+fi
+
+mkdir -p "$target" "$(dirname "$link")"
+ln -s "$target" "$link"
