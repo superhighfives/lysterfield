@@ -57,15 +57,24 @@ a worktree at the pre-migration commit (`bece8e8`: fiber 8.13.5/drei
 - No code change made — `scene.tsx` is unchanged.
 
 **New issues reported (2026-09-30):**
-- **Playhead fades out unexpectedly — fixed (commit `6934b3c`).**
-  Root cause: media-chrome's `<media-controller>` auto-hides every
-  slotted control (opacity 0) after 2s of pointer inactivity during
-  playback — a `userinactive` host attribute drives a CSS rule meant for
-  overlay-on-video controls, which isn't our use case (a persistent pill
-  below the video). Confirmed live: `userinactive` was present and every
-  control's computed opacity was 0 with the pointer idle during playback,
-  exactly matching the reported blank pill. Fixed by adding the
-  `noAutohide` prop to `<MediaController>`. Unrelated to the earlier
+- **Playhead fades out unexpectedly — fixed (commit `99a5c75`, after a
+  false start at `6934b3c`).** Root cause: media-chrome's
+  `<media-controller>` auto-hides every slotted control (opacity 0)
+  after 2s of pointer inactivity during playback — a `userinactive`
+  host attribute drives a CSS rule meant for overlay-on-video controls,
+  which isn't our use case (a persistent pill below the video). First
+  attempt added the `noAutohide` prop to `<MediaController>`, verified
+  via computed opacity, and shipped — but that verification was a false
+  positive (the video happened to be paused at check-time, and the hide
+  rule only applies `:not([mediapaused])`). `noAutohide` is actually a
+  CSS-only opt-out matched against each *individual* slotted control's
+  own attribute (`::slotted(...):not([noautohide])`) — setting it on
+  the controller itself matches nothing. The real fix is
+  `autohide="-1"`, the controller's own JS-level switch that stops
+  `userinactive` from ever being set in the first place. Re-verified
+  properly this time: genuinely playing video (`currentTime` advancing),
+  real hover to trigger pointer-active state, then 4s with zero further
+  pointer movement — controls stayed visible. Unrelated to the earlier
   `useTexture.preload` choose-screen fix.
 - **Weird shadow on the playhead's hover time-preview text — fixed
   (commit `6934b3c`).** Root cause: `media-time-range`'s default CSS
