@@ -255,11 +255,20 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
       intro/outro fade colour, the choose screen's ink artwork and text,
       the welcome splash, and the loading strip.
 - [x] Lyric text: `uBackgroundMix={0.5}` on the lyrics mesh blends its
-      dream-video fill 50% toward white (light) or black (dark).
+      dream-video fill 50% toward black in light mode and white in dark
+      mode. The first pass went the other way (toward the page colour);
+      it was flipped on review because the contrasting colour reads
+      better.
 - [x] Depth shader: relief tapered to 0 at the silhouette edge with a
       quarter-circle profile computed from the avatar's own matte.
-- [~] Depth shader: strength raised from ~0.094 to 0.2, by eye on **one**
-      dream (`20230808103741`) only. Still needs a check across several.
+- [~] Depth shader: reworked on review, see "Depth, second pass" below.
+      Tuned on **one** dream (`20230808103741`) only; still needs a check
+      across several.
+- [x] Polaroid frames go charcoal in dark mode (review feedback).
+- [x] Carousel cards tilt toward the pointer one by one, with a stagger
+      (review feedback).
+- [x] Avatar sharpening: an unsharp mask on the portrait panel (review
+      feedback).
 - [x] Buffering: `isTooSlow` now runs on a per-stall timer that resets
       (see Implementation notes: it wasn't dead, it was broken).
       Prefetching looked at and not done.
@@ -357,6 +366,42 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
   before `setFromObject`), so an ancestor scale doesn't disturb the
   offset it bakes at mount — unlike the Z-separation change reverted in
   a572be1.
+
+- **Depth, second pass (review: "looks wrong, should read like a
+  face").** The depth panel is coarse: bright means near, but a head
+  comes through as one flat plateau. The first pass pushed that forward
+  as-is and rounded it with a 5×5 matte window about as wide as the
+  neck. Side-on, that showed as a block of a head on a pinched neck,
+  which is the stretched face from the review screenshot.
+  - The shape now comes from the depth panel blurred over 0.12 of the
+    panel. Plateaus become rounded hills and the neck blends into the
+    shoulders.
+  - A thin roll-off (0.02) sits at the matte's edge.
+  - Strength is 0.3.
+  - The avatar mesh went from 500² to 256² vertices. That pays for the
+    extra 50 texture samples per vertex and is still about one vertex
+    per 4px of the 1024px panel.
+  - The constants (`DEPTH_*`) are in `main.tsx`; the uniforms are
+    `uShapeRadius` and `uEdgeRadius`.
+  - The depth map has no facial relief (nose, brows), so "like a face"
+    is limited to a well-shaped head. Real facial depth would need a
+    better depth model in the pipeline.
+- **Avatar sharpness.** Panels are 1024px, not 512px as an older shader
+  comment says; the clamp inset there is just conservative. The
+  softness is mostly at source: stylised output, then VP9 compression.
+  An unsharp mask (`uSharpen`, 1.2, over 1.5 texels) firms up edges.
+  Beyond that, sharper output needs pipeline work: higher-res panels,
+  or a higher encoder bitrate for panel 2. The dithered sketch overlay
+  (panel 6 multiplied at 0.3) also adds visible stipple on the face; that
+  overlay is the existing look and was left alone.
+- **Charcoal polaroids.** The frame materials are a white paper texture
+  times `color`. Dark mode sets `#2b2826` on the three frame materials,
+  which useGLTF shares across every instance; the paper grain survives.
+- **Staggered carousel tilt.** `Slider` wraps each card's contents in an
+  inner group that lerps toward a pointer-driven tilt. The lerp factor
+  falls from 0.12 at the centre to 0.02 five card-widths out, so motion
+  ripples outward. The camera's whole-scene parallax is unchanged; this
+  sits on top of it.
 
 ## Verified
 

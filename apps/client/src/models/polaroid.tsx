@@ -1,9 +1,10 @@
 import { useGLTF } from '@react-three/drei'
 import { Euler, ThreeElements, Vector3 } from '@react-three/fiber'
-import { forwardRef, JSX, RefObject } from 'react'
+import { forwardRef, JSX, RefObject, useEffect } from 'react'
 import { GLTF } from 'three-stdlib'
 import { CanvasTexture, Group, Mesh, MeshStandardMaterial } from 'three'
 import { animated } from '@react-spring/three'
+import { useStore } from '../store'
 
 // A soft radial falloff used as an alpha map for the drop-shadow plane
 // below — built once at module load (not per-card-instance: up to ~20
@@ -49,6 +50,9 @@ type GLTFResult = GLTF & {
 // transform — hoisted so the ~20 on-screen Polaroid instances in the
 // choose-screen carousel aren't each allocating three fresh arrays per
 // render.
+const FRAME_LIGHT = '#ffffff'
+const FRAME_DARK = '#2b2826'
+
 const rotation = [0, 0, 0]
 const position = [0, 0, 0]
 const scale = [1.0, 1.0, 1.0]
@@ -65,6 +69,21 @@ const Polaroid = forwardRef<
   ) as unknown as GLTFResult
 
   materials['Material.001'].transparent = true
+
+  // Charcoal frames in dark mode. The frame materials are a white paper
+  // texture times `color`, so tinting keeps the paper grain. useGLTF
+  // shares one set of materials across every Polaroid instance, so this
+  // tints them all at once.
+  const dark = useStore((state) => state.colorScheme === 'dark')
+  useEffect(() => {
+    for (const material of [
+      materials.Frameblinn2SG,
+      materials.Framelambert79SG,
+      materials.initialShadingGroup,
+    ]) {
+      material.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
+    }
+  }, [dark, materials])
 
   return (
     <animated.group ref={ref} {...props} dispose={null}>
