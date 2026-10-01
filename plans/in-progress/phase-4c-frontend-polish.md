@@ -440,12 +440,49 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
     black), on a 5.6×6.6 plane nudged toward the card behind, at
     opacity 0.28. It's barely visible in dark mode (black on near-black);
     a light-mode-only effect in practice.
-- **Glare (review: only on the left half's cards).** The polaroids' sheen
-  is the spotlight's specular highlight. The light was fixed at x=5, so
-  given the fan's card angles, the highlight landed left of centre
-  whatever the pointer did. On the choose screen, the light now follows
-  the pointer: x ±20 and y ±12, eased. It returns to its original spot
-  once a dream plays.
+- **Glare (review: only on the left half's cards).** The first attempt
+  was wrong. It moved the far light with the pointer, on the assumption
+  that the glare was a specular highlight.
+  - Measuring it showed otherwise. I diffed frames with the light on
+    against light off, with the cards' bob frozen. The spotlight only
+    lights the frames (the photos are unlit), and mostly diffusely: a
+    frame is brightest when it faces the light. The fan turns right-hand
+    cards to face left, so any light to the right lit the *left* half of
+    the row brightest. Moving it right with the pointer made the reported
+    bug worse.
+  - On the choose screen, the light now sits at the camera and aims at
+    the point under the pointer, with a soft cone (half-angle 0.85, full
+    penumbra). Brightness follows a pool of light under the mouse.
+    Verified with the pointer hard left vs hard right: the lit cards
+    swap sides.
+  - It eases back to the original fixed light (x=5, z=30, aimed at the
+    origin) once a dream is selected.
+  - Position and target moved out of JSX props into the light's
+    construction, so a re-render can't reapply them mid-ease.
+- **Dark-mode shadow and background (review).**
+  - Carousel shadows are at opacity 0.8 in dark mode (0.28 in light).
+    The player's polaroid keeps 0.28, where the stronger value read as a
+    smudge, since there's no card behind it.
+  - The page background is a radial "bowl" on `body` (`--bowl-centre` /
+    `--bowl-edge` in `index.css`). In dark mode it's #24201e to #0c0a09;
+    in light mode, a very subtle #fafaf9 to #eceae7.
+  - The canvas is transparent, so the bowl shows through.
+- **Heading under the cards (regression from layering, fixed).** Cards
+  now draw last with depth cleared, so they painted over the "Where are
+  we going?" heading.
+  - It's now wrapped in a group with `ABOVE_CAROUSEL_RENDER_ORDER`
+    (5000). It has to be the group: three.js sorts transparent objects
+    by their nearest Group's renderOrder before their own.
+  - The same rule is what makes the per-card ordering work. The slider's
+    traversal stamps card groups too.
+
+## Open follow-ups (review round)
+
+- **Glossy charcoal frames.** In dark mode, the player's polaroid (and
+  carousel cards under the pointer's light) show a strong white specular
+  streak. The frame materials are glossy (roughness 0.07-0.16). On white
+  frames the streak was invisible. Raising roughness in dark mode would
+  soften it, if it reads as too plasticky.
 
 ## Verified
 

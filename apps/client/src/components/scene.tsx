@@ -10,6 +10,7 @@ import { RefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
 	MathUtils,
 	Mesh,
+	Vector3,
 	MeshStandardMaterial,
 	PerspectiveCamera as PerspectiveCameraType,
 	SpotLight,
@@ -19,6 +20,10 @@ import { useStore } from "../store";
 import { getRotation } from "../utils";
 import Choose from "../views/choose";
 import Main from "../views/main";
+
+// Half-angle of the choose screen's pointer-following light cone. With a
+// full penumbra, brightness falls off smoothly from the centre to this edge.
+const SPOT_ANGLE_CHOOSING = 0.85;
 
 function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const camera = useRef<PerspectiveCameraType>(null);
@@ -59,24 +64,39 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 				dotMaterial.current.opacity = useStore.getState().polaroidVisible;
 		}
 
-		// The polaroids' glare is this spotlight's specular highlight. Fixed
-		// at x=5, it only lined up with cards at certain angles, which in
-		// the carousel's fan meant cards left of centre — wherever the
-		// pointer was. On the choose screen it now follows the pointer (by
-		// roughly how far a far-off light has to move for its reflection in
-		// a camera-facing card to cross the screen), so the glare tracks
-		// the mouse. Back at its original spot once a dream is playing.
-		const glare = dream ? 0 : 1;
-		spotlight.position.x = MathUtils.lerp(
-			spotlight.position.x,
-			5 + state.pointer.x * 20 * glare,
-			0.05,
+		// The spotlight only lights the polaroid frames (the photos are
+		// unlit), and mostly diffusely — a frame is brightest when it faces
+		// the light. In the carousel's fan, right-hand cards face left, so a
+		// light anywhere to the right lit the *left* half of the row
+		// brightest, wherever the pointer was. On the choose screen the
+		// light instead sits at the camera and aims at the point under the
+		// pointer, with a soft-edged cone: brightness follows a pool of light
+		// under the mouse rather than which way each card happens to face.
+		// It eases back to the original fixed light (tuned for the player's
+		// polaroid) once a dream is selected.
+		const choosing = !dream;
+		const target = spotlight.target.position;
+		if (choosing) {
+			spotTarget.set(
+				(state.pointer.x * viewport.width) / 2,
+				(state.pointer.y * viewport.height) / 2,
+				0,
+			);
+			spotPosition.set(state.camera.position.x, state.camera.position.y, CAMERA_Z + 1);
+		} else {
+			spotTarget.set(0, 0, 0);
+			spotPosition.set(5, 0, 30);
+		}
+
+		target.lerp(spotTarget, 0.08);
+		spotlight.target.updateMatrixWorld();
+		spotlight.position.lerp(spotPosition, 0.08);
+		spotlight.angle = MathUtils.lerp(
+			spotlight.angle,
+			choosing ? SPOT_ANGLE_CHOOSING : Math.PI / 3,
+			0.08,
 		);
-		spotlight.position.y = MathUtils.lerp(
-			spotlight.position.y,
-			state.pointer.y * 12 * glare,
-			0.05,
-		);
+		spotlight.penumbra = MathUtils.lerp(spotlight.penumbra, choosing ? 1 : 0, 0.08);
 
 		const pointer = useStore.getState().globalPointer;
 		if (dotMesh.current) {
@@ -124,7 +144,16 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 		}
 	};
 
-	const spotlight = useMemo(() => new SpotLight("#fff"), []);
+	// Position and target are driven every frame (see useFrame above), so
+	// they're set here once rather than as JSX props a re-render could
+	// reapply mid-ease.
+	const spotlight = useMemo(() => {
+		const light = new SpotLight("#fff");
+		light.position.set(5, 0, 30);
+		return light;
+	}, []);
+	const spotTarget = useMemo(() => new Vector3(), []);
+	const spotPosition = useMemo(() => new Vector3(5, 0, 30), []);
 
 	return (
 		<>
@@ -157,7 +186,6 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
             that to bring the frames back up to a proper bright white. */}
 				<primitive
 					object={spotlight}
-					position={[5, 0, 30]}
 					intensity={5}
 					decay={0}
 					castShadow
@@ -165,7 +193,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 					shadow-mapSize-width={1024}
 					shadow-mapSize-height={1024}
 				/>
-				<primitive object={spotlight.target} position={[0, 0, 0]} />
+				<primitive object={spotlight.target} />
 			</group>
 
 			<ScrollControls pages={2.7} damping={0.1}>

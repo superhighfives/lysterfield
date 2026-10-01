@@ -125,7 +125,12 @@ const Polaroid = forwardRef<
           color="black"
           alphaMap={shadowTexture}
           transparent
-          opacity={0.28}
+          // Much stronger for carousel cards in dark mode, where it falls
+          // on charcoal cards and black-on-near-black barely registers at
+          // the light value. Not on the player's polaroid, where it has no
+          // card behind to land on and just reads as a dark smudge on the
+          // background.
+          opacity={dark && layered ? 0.8 : 0.28}
           depthWrite={false}
         />
       </mesh>

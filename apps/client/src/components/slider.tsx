@@ -23,6 +23,10 @@ import { Dream } from '../utils/types'
 // See the layering comment in Slider. Comfortably above any renderOrder
 // used elsewhere in the scene (all default 0).
 const CARD_RENDER_ORDER = 1000
+// For anything that has to draw over the carousel where it's in front of
+// it. Layering means cards draw last, with depth cleared, so ordinary
+// depth testing no longer hides a card behind something nearer.
+export const ABOVE_CAROUSEL_RENDER_ORDER = 5000
 
 // The per-card depth-clear marker: it only exists for its onBeforeRender
 // hook, so it draws nothing (no colour, no depth) — but it must be
