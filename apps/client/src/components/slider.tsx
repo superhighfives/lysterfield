@@ -6,7 +6,7 @@ import {
   useState,
 } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Euler, MathUtils, Vector3 } from 'three'
+import { Euler, MathUtils, Object3D, Vector3 } from 'three'
 import { useCursor, Center } from '@react-three/drei'
 import { animated, useSprings } from '@react-spring/three'
 import { useGesture } from '@use-gesture/react'
@@ -45,6 +45,17 @@ export default function Slider({
     scale: [1, 1, 1],
   }))
   const prev = useRef([0, 1])
+  // Each card's Polaroid photo/overlay meshes and its title/prompt Text
+  // are all separate transparent objects with their own bounding
+  // spheres, offset and rotated per-card — three.js's automatic
+  // back-to-front sort for transparent objects (by bounding-sphere
+  // distance to camera) can get that wrong at the carousel's steeper
+  // rotation angles, letting a neighboring card's text or overlay
+  // render on top of a card that should occlude it. `z` below is
+  // monotonic in `rank` (both derive from the same `xpos`), so setting
+  // an explicit per-card `renderOrder` from `rank` forces three.js to
+  // respect the carousel's own front-to-back order instead of guessing.
+  const cardRefs = useRef<Record<number, Object3D | null>>({})
 
   const runSprings = useCallback(
     (y: number, dy: number) => {
@@ -57,6 +68,14 @@ export default function Slider({
           firstVis - (y < 0 ? items.length : 0) + position - firstVisIdx - 1
         const configPos = dy > 0 ? position : items.length - position
         const scale = 1.0
+        const card = cardRefs.current[i]
+        if (card) {
+          const renderOrder = Math.round(rank)
+          card.traverse((child) => {
+            child.renderOrder = renderOrder
+          })
+        }
+
         return {
           position: [
             (-y % (width * items.length)) + width * rank,
@@ -176,6 +195,9 @@ export default function Slider({
       <Center position={[0, 0, -0.4]}>
         {springs.map(({ position, rotation, scale }, i) => (
           <animated.group
+            ref={(el) => {
+              cardRefs.current[i] = el
+            }}
             position={position as unknown as Vector3}
             scale={scale as unknown as Vector3}
             rotation={rotation as unknown as Euler}
