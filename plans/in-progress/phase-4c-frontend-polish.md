@@ -415,6 +415,38 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
     the carousel frozen: each card's outline moved by a different amount
     and direction.
 
+- **Carousel card overlap (review: "still overlapping").** Neighbouring
+  cards physically intersect: they're close, and rotated differently.
+  With a shared depth buffer, the card in front was cut through along a
+  jagged seam. The earlier fix, more Z separation (f245175), was
+  reverted in a572be1 because `<Center>` freezes its offset at mount, so
+  a steeper Z line pulls the centred card into the camera. Instead, the
+  cards are now drawn as layers:
+  - Each card's renderOrder comes from its rank, which is monotonic with
+    Z. It's offset to 1000+ so it sits above the rest of the scene.
+  - A per-card marker mesh clears the depth buffer just before that card
+    draws. Depth is only tested within a card; between cards, draw order
+    decides, and the front card paints cleanly over the one behind.
+  - This needs every part of a card in the transparent pass, so carousel
+    cards use transparent copies of the frame materials
+    (`Polaroid layered`). The player's polaroid keeps the originals.
+  - No geometry changed, so `<Center>` is unaffected.
+- **Drop shadow (review: "can't see any shadow").**
+  - Its plane (3.5×3.6) was smaller than the frame (3.66×4.47), so it was
+    always hidden behind its own card.
+  - Its texture faded canvas alpha, but `alphaMap` reads green, so it was
+    a hard disc. Once visible, that looked like pixelated circles.
+  - It's now a soft-edged rectangle (canvas `shadowBlur`, white on
+    black), on a 5.6×6.6 plane nudged toward the card behind, at
+    opacity 0.28. It's barely visible in dark mode (black on near-black);
+    a light-mode-only effect in practice.
+- **Glare (review: only on the left half's cards).** The polaroids' sheen
+  is the spotlight's specular highlight. The light was fixed at x=5, so
+  given the fan's card angles, the highlight landed left of centre
+  whatever the pointer did. On the choose screen, the light now follows
+  the pointer: x ±20 and y ±12, eased. It returns to its original spot
+  once a dream plays.
+
 ## Verified
 
 Checked in an isolated Chrome instance against the local dev server, in

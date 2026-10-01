@@ -59,6 +59,25 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 				dotMaterial.current.opacity = useStore.getState().polaroidVisible;
 		}
 
+		// The polaroids' glare is this spotlight's specular highlight. Fixed
+		// at x=5, it only lined up with cards at certain angles, which in
+		// the carousel's fan meant cards left of centre — wherever the
+		// pointer was. On the choose screen it now follows the pointer (by
+		// roughly how far a far-off light has to move for its reflection in
+		// a camera-facing card to cross the screen), so the glare tracks
+		// the mouse. Back at its original spot once a dream is playing.
+		const glare = dream ? 0 : 1;
+		spotlight.position.x = MathUtils.lerp(
+			spotlight.position.x,
+			5 + state.pointer.x * 20 * glare,
+			0.05,
+		);
+		spotlight.position.y = MathUtils.lerp(
+			spotlight.position.y,
+			state.pointer.y * 12 * glare,
+			0.05,
+		);
+
 		const pointer = useStore.getState().globalPointer;
 		if (dotMesh.current) {
 			dotMesh.current.position.set(pointer.x - 1.0, pointer.y - 1.0, -0.5);

@@ -6,28 +6,27 @@ import { CanvasTexture, Group, Mesh, MeshStandardMaterial } from 'three'
 import { animated } from '@react-spring/three'
 import { useStore } from '../store'
 
-// A soft radial falloff used as an alpha map for the drop-shadow plane
-// below — built once at module load (not per-card-instance: up to ~20
-// Polaroids share this one texture) rather than shipping another binary
-// asset for what's just a blurred circle.
+// A soft-edged rectangle used as the drop shadow's alpha map — built once
+// at module load (up to ~20 Polaroids share this one texture) rather than
+// shipping another binary asset for a blurred box. alphaMap reads the
+// texture's *green* channel, not its alpha, so the falloff is drawn as
+// white-on-black: a gradient that only faded canvas alpha (as this first
+// did) left green at full strength right up to the edge, giving a hard
+// disc. The blur comes from canvas's shadowBlur: the rectangle itself is
+// drawn off-canvas, and only its offset shadow lands inside.
 const shadowTexture = (() => {
   const size = 128
+  const inset = 24
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = size
   const ctx = canvas.getContext('2d')!
-  const gradient = ctx.createRadialGradient(
-    size / 2,
-    size / 2,
-    0,
-    size / 2,
-    size / 2,
-    size / 2
-  )
-  gradient.addColorStop(0, 'rgba(255,255,255,1)')
-  gradient.addColorStop(0.75, 'rgba(255,255,255,0.9)')
-  gradient.addColorStop(1, 'rgba(255,255,255,0)')
-  ctx.fillStyle = gradient
+  ctx.fillStyle = 'black'
   ctx.fillRect(0, 0, size, size)
+  ctx.shadowColor = 'white'
+  ctx.shadowBlur = 16
+  ctx.shadowOffsetX = size * 4
+  ctx.fillStyle = 'white'
+  ctx.fillRect(inset - size * 4, inset, size - inset * 2, size - inset * 2)
   return new CanvasTexture(canvas)
 })()
 
@@ -46,13 +45,32 @@ type GLTFResult = GLTF & {
   }
 }
 
+const FRAME_LIGHT = '#ffffff'
+const FRAME_DARK = '#2b2826'
+
+// Carousel cards are drawn as layers, one at a time, each into its own
+// cleared depth buffer (see slider.tsx). That only works if every part of
+// a card lands in three.js's transparent pass — opaque objects all draw
+// first, in a pass of their own — so the carousel gets its own
+// transparent copies of the frame materials. The player's polaroid keeps
+// the shared originals. One copy per material is enough: draw order comes
+// from each mesh's renderOrder, not its material.
+const layeredCopies = new Map<MeshStandardMaterial, MeshStandardMaterial>()
+function layeredCopy(material: MeshStandardMaterial) {
+  let copy = layeredCopies.get(material)
+  if (!copy) {
+    copy = material.clone()
+    copy.transparent = true
+    layeredCopies.set(material, copy)
+  }
+
+  return copy
+}
+
 // Every Object_3/Object_4/Object_5 mesh below shares this same identity
 // transform — hoisted so the ~20 on-screen Polaroid instances in the
 // choose-screen carousel aren't each allocating three fresh arrays per
 // render.
-const FRAME_LIGHT = '#ffffff'
-const FRAME_DARK = '#2b2826'
-
 const rotation = [0, 0, 0]
 const position = [0, 0, 0]
 const scale = [1.0, 1.0, 1.0]
@@ -62,18 +80,22 @@ const Polaroid = forwardRef<
   ThreeElements['group'] & {
     passthroughMaterial: JSX.Element
     intersectRef?: RefObject<Mesh>
+    /** Carousel card: use the transparent material copies (see above). */
+    layered?: boolean
   }
->((props, ref) => {
+>(({ layered, passthroughMaterial, intersectRef, ...props }, ref) => {
   const { nodes, materials } = useGLTF(
     '/models/polaroid.glb'
   ) as unknown as GLTFResult
+  const frame = (material: MeshStandardMaterial) =>
+    layered ? layeredCopy(material) : material
 
   materials['Material.001'].transparent = true
 
   // Charcoal frames in dark mode. The frame materials are a white paper
   // texture times `color`, so tinting keeps the paper grain. useGLTF
-  // shares one set of materials across every Polaroid instance, so this
-  // tints them all at once.
+  // shares one set of materials across every Polaroid instance (and the
+  // carousel shares one set of copies), so this tints them all at once.
   const dark = useStore((state) => state.colorScheme === 'dark')
   useEffect(() => {
     for (const material of [
@@ -82,28 +104,28 @@ const Polaroid = forwardRef<
       materials.initialShadingGroup,
     ]) {
       material.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
+      layeredCopies.get(material)?.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
     }
-  }, [dark, materials])
+  }, [dark, materials, layered])
 
   return (
     <animated.group ref={ref} {...props} dispose={null}>
-      {/* Drop shadow — the carousel fans these out close enough that a
-          card in front routinely overlaps its neighbor's screen
-          position, and with nothing but the frame's own flat color the
-          overlap read as two cards fighting for the same pixels rather
-          than one sitting in front of the other. A soft radial falloff
-          behind the frame (bigger than it, so the edge peeks out) gives
-          that overlap a believable "resting on top of" cue instead.
-          `depthWrite={false}` keeps it from blocking anything actually
-          behind it in the depth buffer — it's meant to be seen through,
-          not occlude. */}
-      <mesh position={[0, 0.23, -0.3]}>
-        <planeGeometry args={[3.5, 3.6]} />
+      {/* Drop shadow, so a card in front reads as resting on the one
+          behind it. The plane has to be larger than the frame itself
+          (3.66 x 4.47 units) to show at all — an earlier 3.5 x 3.6 sat
+          entirely hidden behind its own card — and the alpha map's soft
+          box only fills its middle ~60%, so it's sized well past that.
+          It's also nudged left, toward the neighbour behind (cards
+          further left sit further back).
+          `depthWrite={false}`: it's meant to be seen through, not to
+          occlude anything. */}
+      <mesh position={[-0.35, -0.2, -0.3]}>
+        <planeGeometry args={[5.6, 6.6]} />
         <meshBasicMaterial
           color="black"
           alphaMap={shadowTexture}
           transparent
-          opacity={0.6}
+          opacity={0.28}
           depthWrite={false}
         />
       </mesh>
@@ -119,7 +141,7 @@ const Polaroid = forwardRef<
 
       {/* Inside */}
       <mesh
-        ref={props.intersectRef}
+        ref={intersectRef}
         castShadow
         receiveShadow
         geometry={nodes.Object_3.geometry}
@@ -127,14 +149,14 @@ const Polaroid = forwardRef<
         position={position as Vector3}
         scale={scale as Vector3}
       >
-        {props.passthroughMaterial}
+        {passthroughMaterial}
       </mesh>
       {/* Back */}
       <mesh
         castShadow
         receiveShadow
         geometry={nodes.Object_4.geometry}
-        material={materials.Framelambert79SG}
+        material={frame(materials.Framelambert79SG)}
         rotation={rotation as Euler}
         position={position as Vector3}
         scale={scale as Vector3}
@@ -144,7 +166,7 @@ const Polaroid = forwardRef<
         castShadow
         receiveShadow
         geometry={nodes.Object_5.geometry}
-        material={materials.initialShadingGroup}
+        material={frame(materials.initialShadingGroup)}
         rotation={rotation as Euler}
         position={position as Vector3}
         scale={scale as Vector3}

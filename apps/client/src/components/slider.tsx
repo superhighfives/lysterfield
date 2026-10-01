@@ -6,12 +6,34 @@ import {
   useState,
 } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Euler, MathUtils, Object3D, Vector3 } from 'three'
+import {
+  Euler,
+  MathUtils,
+  MeshBasicMaterial,
+  Object3D,
+  PlaneGeometry,
+  Vector3,
+} from 'three'
 import { useCursor, Center } from '@react-three/drei'
 import { animated, useSprings } from '@react-spring/three'
 import { useGesture } from '@use-gesture/react'
 import { useStore } from '../store'
 import { Dream } from '../utils/types'
+
+// See the layering comment in Slider. Comfortably above any renderOrder
+// used elsewhere in the scene (all default 0).
+const CARD_RENDER_ORDER = 1000
+
+// The per-card depth-clear marker: it only exists for its onBeforeRender
+// hook, so it draws nothing (no colour, no depth) — but it must be
+// transparent to share the pass the card's own parts draw in.
+const depthClearGeometry = new PlaneGeometry(0.001, 0.001)
+const depthClearMaterial = new MeshBasicMaterial({
+  transparent: true,
+  colorWrite: false,
+  depthWrite: false,
+  depthTest: false,
+})
 
 // Per-frame lerp factors for the pointer tilt: the centre card eases at
 // TILT_EASE_NEAR, falling to TILT_EASE_FAR by TILT_STAGGER_CARDS card
@@ -58,16 +80,23 @@ export default function Slider({
     scale: [1, 1, 1],
   }))
   const prev = useRef([0, 1])
-  // Each card's Polaroid photo/overlay meshes and its title/prompt Text
-  // are all separate transparent objects with their own bounding
-  // spheres, offset and rotated per-card — three.js's automatic
-  // back-to-front sort for transparent objects (by bounding-sphere
-  // distance to camera) can get that wrong at the carousel's steeper
-  // rotation angles, letting a neighboring card's text or overlay
-  // render on top of a card that should occlude it. `z` below is
-  // monotonic in `rank` (both derive from the same `xpos`), so setting
-  // an explicit per-card `renderOrder` from `rank` forces three.js to
-  // respect the carousel's own front-to-back order instead of guessing.
+  // Cards are drawn as layers, strictly back to front, each into a freshly
+  // cleared depth buffer. The fan places cards close enough, and rotated
+  // enough relative to each other, that neighbours physically intersect:
+  // with one shared depth buffer, a card in front got cut through by the
+  // one behind along a jagged seam. Separating them in Z isn't an option
+  // (see a572be1: <Center> below freezes its offset at mount, so a
+  // steeper Z line pulls the centred card into the camera). So depth is
+  // only tested *within* a card; between cards, draw order alone decides,
+  // and the front card always paints cleanly over its neighbour.
+  //
+  // Each card's renderOrder comes from its rank, which is monotonic with
+  // its Z (both come from the same `xpos`), offset into a band above the
+  // rest of the scene so the depth clears can't affect anything else.
+  // Within a card, a marker mesh (renderOrder `base`) clears depth just
+  // before the card's own parts (`base + 1`) draw. Every part has to be in
+  // the transparent pass for that ordering to hold — see polaroid.tsx's
+  // `layered` materials.
   const cardRefs = useRef<Record<number, Object3D | null>>({})
 
   const runSprings = useCallback(
@@ -83,9 +112,9 @@ export default function Slider({
         const scale = 1.0
         const card = cardRefs.current[i]
         if (card) {
-          const renderOrder = Math.round(rank)
+          const base = CARD_RENDER_ORDER + Math.round(rank) * 2
           card.traverse((child) => {
-            child.renderOrder = renderOrder
+            child.renderOrder = child.userData.clearsDepth ? base : base + 1
           })
         }
 
@@ -259,6 +288,17 @@ export default function Slider({
             rotation={rotation as unknown as Euler}
             key={i}
           >
+            <mesh
+              ref={(el) => {
+                if (!el) return
+                el.userData.clearsDepth = true
+                el.onBeforeRender = (renderer) => renderer.clearDepth()
+                // Must never be culled, or its card's depth clear is skipped.
+                el.frustumCulled = false
+              }}
+              geometry={depthClearGeometry}
+              material={depthClearMaterial}
+            />
             <group
               ref={(el) => {
                 tiltRefs.current[i] = el

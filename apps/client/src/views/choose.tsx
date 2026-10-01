@@ -348,6 +348,7 @@ function Choose(props: ThreeElements['group']) {
                 scale={scaleAmount}
               >
                 <Polaroid
+                  layered
                   onPointerOver={(e) => {
                     e.stopPropagation()
                     setHover(true)
