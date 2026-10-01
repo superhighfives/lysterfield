@@ -270,11 +270,12 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
 
 ## Decisions (were open questions)
 
-- **Dark mode trigger**: both. Follows `prefers-color-scheme` by default.
-  A toggle in the top-right link row flips whichever scheme is showing.
-  Flipping back to the OS's own scheme stores "follow system" again, so
-  there's no third state. The choice is saved in `localStorage.theme`,
-  and an inline script in `index.html` applies it before first paint.
+- **Dark mode trigger**: both. A System / Light / Dark radio group sits
+  in the top-right link row (icons, tooltips, arrow-key navigation) and
+  defaults to System. The choice is saved in `localStorage.theme`, and an
+  inline script in `index.html` applies it before first paint. The first
+  pass was a two-state flip toggle; it became the explicit three-way
+  control after review.
 - **Dark mode scope**: the 2D UI plus the scene background, the lyric
   background and the shader's fade colour. The polaroid model's own
   materials are untouched.
