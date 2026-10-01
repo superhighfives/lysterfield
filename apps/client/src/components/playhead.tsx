@@ -198,10 +198,24 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               // back to 24px) — left unset, the icons rendered a real
               // height but a 0 width, making them invisible.
               '--media-button-icon-width': '24px',
+              // media-time-range's default preview styling assumes the
+              // preview time sits over a video thumbnail and applies a
+              // blurred drop shadow for contrast — against our opaque white
+              // pill that shadow just renders as a stray gray halo.
+              '--media-preview-time-text-shadow': 'none',
             } as CSSProperties
           }
         >
-          <MediaController className="contents">
+          <MediaController className="contents" noAutohide>
+            {/* media-chrome auto-hides every non-media/poster slotted
+                control after 2s of pointer inactivity during playback
+                (`userinactive` host attribute) — built for overlaying
+                controls on top of the video itself. Ours is a persistent
+                control bar below the video, not an overlay, so it should
+                never fade out on its own; `noAutohide` disables that
+                behavior. This is what caused the pill to render fully
+                blank (all its controls at opacity 0) a couple of seconds
+                into playback whenever the pointer stopped moving. */}
             {/* eslint-disable-next-line jsx-a11y/media-has-caption -- generated video has no dialogue/caption track to provide */}
             <video
               slot="media"
