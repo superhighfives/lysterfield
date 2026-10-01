@@ -1,7 +1,9 @@
 #!/bin/sh
-# Shares apps/pipeline/.jobs across all worktrees: in a linked worktree,
-# symlink it to the main checkout's copy so pipeline outputs (and the
-# skip-if-output-exists checks guarding Replicate calls) aren't duplicated.
+# Shares gitignored per-machine state across all worktrees: in a linked
+# worktree, symlink each path below to the main checkout's copy.
+# - apps/pipeline/.jobs: pipeline outputs, so the skip-if-output-exists checks
+#   guarding Replicate calls aren't defeated by a fresh, empty copy.
+# - apps/pipeline/.env: REPLICATE_API_TOKEN and friends.
 # Runs automatically on `git worktree add`; safe to run by hand in an
 # existing worktree.
 
@@ -11,14 +13,25 @@ main=$(dirname "$common")
 
 [ "$(cd "$top" && pwd -P)" = "$main" ] && exit 0
 
-link="$top/apps/pipeline/.jobs"
-target="$main/apps/pipeline/.jobs"
+share() {
+  link="$top/$1"
+  target="$main/$1"
 
-[ -L "$link" ] && exit 0
-if [ -e "$link" ]; then
-  echo "post-checkout: $link exists and isn't a symlink; leaving it alone" >&2
-  exit 0
+  [ -L "$link" ] && return
+  if [ -e "$link" ]; then
+    echo "post-checkout: $link exists and isn't a symlink; leaving it alone" >&2
+    return
+  fi
+
+  mkdir -p "$(dirname "$link")"
+  ln -s "$target" "$link"
+}
+
+mkdir -p "$main/apps/pipeline/.jobs"
+share apps/pipeline/.jobs
+
+if [ -e "$main/apps/pipeline/.env" ]; then
+  share apps/pipeline/.env
+else
+  echo "post-checkout: no apps/pipeline/.env in the main checkout to share" >&2
 fi
-
-mkdir -p "$target" "$(dirname "$link")"
-ln -s "$target" "$link"
