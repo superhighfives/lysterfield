@@ -158,7 +158,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           </button>
         </div>
         <div
-          className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[54px] bg-white border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity ${
+          className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[34px] bg-white border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity xs:[--media-control-padding:4px] ${
             showPlayhead && polaroidVisible > 0.3
               ? ''
               : 'pointer-events-none opacity-0'
@@ -256,7 +256,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               <div className="flex self-stretch justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
                 <Footer />
                 <div className="group flex relative">
-                  <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2">
+                  <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2 xs:px-2 xs:py-1">
                     {/*
                       media-chrome-button's shadow CSS sizes slotted icons
                       via `width: var(--media-button-icon-width)` plus
@@ -271,38 +271,38 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                     */}
                     <SpeakerSimpleX
                       slot="off"
-                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                      className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                     <SpeakerSimpleLow
                       slot="low"
-                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                      className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                     <SpeakerSimpleNone
                       slot="medium"
-                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                      className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                     <SpeakerSimpleHigh
                       slot="high"
-                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                      className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                   </MediaMuteButton>
                   <Tooltip text="Toggle mute" />
                 </div>
                 <div className="group flex relative">
-                  <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 pr-4 py-2">
+                  <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 pr-4 py-2 xs:px-2 xs:pr-3 xs:py-1">
                     <Play
                       slot="play"
-                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                      className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                     <Pause
                       slot="pause"
-                      className="!w-5 !h-5 !max-w-none !min-w-0"
+                      className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
                     />
                   </MediaPlayButton>
                   <Tooltip text={videoPlaying ? 'Pause' : 'Play'} />
                 </div>
               </div>
-              <div className="flex w-full gap-2 items-center pl-3 xs:pl-0 pr-3 py-2 ">
+              <div className="flex w-full gap-2 items-center pl-3 xs:pl-0 pr-3 py-2 xs:py-1">
                 <MediaTimeDisplay className="font-mono text-xs" />
                 <MediaTimeRange
                   className="grow h-4

@@ -14,26 +14,26 @@ function Footer() {
     <>
       <button
         onClick={() => setResetting(true)}
-        className="xs:rounded-l-full group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 pl-5 pr-3 py-2"
+        className="xs:rounded-l-full group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 pl-5 pr-3 py-2 xs:pl-4 xs:pr-2 xs:py-1"
       >
-        <SkipBack className="w-5 h-5" />
+        <SkipBack className="w-5 h-5 xs:w-4 xs:h-4" />
         <Tooltip text="Return to home" />
       </button>
       {isMobile ? (
         <button
           onClick={() => setResetInitialRotation(true)}
-          className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2"
+          className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2 xs:px-2 xs:py-1"
         >
-          <CameraRotate className="w-5 h-5" />
+          <CameraRotate className="w-5 h-5 xs:w-4 xs:h-4" />
           <Tooltip text="Reorient mobile" />
         </button>
       ) : null}
       {dream ? (
         <a
-          className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2"
+          className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2 xs:px-2 xs:py-1"
           href={dream.link}
         >
-          <YoutubeLogo className="w-5 h-5" />
+          <YoutubeLogo className="w-5 h-5 xs:w-4 xs:h-4" />
           <Tooltip text="View on YouTube" />
         </a>
       ) : null}
