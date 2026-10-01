@@ -35,11 +35,25 @@ useTexture.preload('images/action-scroll.png')
 useTexture.preload('images/choose.png')
 dreams.forEach((dream) => useTexture.preload(`/assets/${dream.id}/hero.jpg`))
 
+// The welcome/choose/scroll-hint artwork is black ink on transparent —
+// inverted to white ink in dark mode so it still reads against the page.
+const invertInk = (shader: { fragmentShader: string }) => {
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <map_fragment>',
+    '#include <map_fragment>\n  diffuseColor.rgb = 1.0 - diffuseColor.rgb;'
+  )
+}
+
 function Choose(props: ThreeElements['group']) {
   const collection = useStore((state) => state.collection)
   const isMobile = useStore((state) => state.isMobile)
   const dream = useStore((state) => state.dream)
   const setDream = useStore((state) => state.setDream)
+  const colorScheme = useStore((state) => state.colorScheme)
+  const dark = colorScheme === 'dark'
+  // A fresh material per scheme (via `key`) rather than toggling
+  // onBeforeCompile on the existing one, which wouldn't recompile.
+  const inkProps = { onBeforeCompile: dark ? invertInk : undefined }
   const setPolaroidVisible = useStore((state) => state.setPolaroidVisible)
   const setPolaroidPillVisible = useStore(
     (state) => state.setPolaroidPillVisible
@@ -69,6 +83,16 @@ function Choose(props: ThreeElements['group']) {
     () => [...collection, ...collection],
     [collection]
   )
+
+  // Choosing a card already leaves the page scrolled down to the player,
+  // but a dream restored from the URL or browser history (see
+  // utils/use-history-sync.ts) arrives with the page at the top — scroll
+  // down to it. Done from useFrame once the scroll container has a real
+  // height, since on a cold load the dream is set as the scene mounts.
+  const scrollToPlayer = useRef(false)
+  useEffect(() => {
+    if (dream) scrollToPlayer.current = true
+  }, [dream])
 
   useEffect(() => {
     if (titleVisible) {
@@ -109,6 +133,19 @@ function Choose(props: ThreeElements['group']) {
   }))
 
   useFrame(() => {
+    if (scrollToPlayer.current) {
+      // ScrollControls ignores scroll events until a frame after it starts
+      // listening, so a jump made in that window is silently dropped — keep
+      // re-announcing it until its offset actually starts moving.
+      const max = data.el.scrollHeight - data.el.clientHeight
+      if (data.offset > 0.01) {
+        scrollToPlayer.current = false
+      } else if (max > 0) {
+        if (data.el.scrollTop < max) data.el.scrollTop = max
+        else data.el.dispatchEvent(new Event('scroll'))
+      }
+    }
+
     const nextPolaroidVisibility = !dream
       ? MathUtils.lerp(
           polaroidVisibilityRef.current,
@@ -210,6 +247,8 @@ function Choose(props: ThreeElements['group']) {
         {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
         {/* @ts-ignore: https://github.com/pmndrs/react-spring/issues/1515 */}
         <animated.meshBasicMaterial
+          key={colorScheme}
+          {...inkProps}
           opacity={actionScrollOpacity}
           transparent
           map={actionScroll}
@@ -221,13 +260,25 @@ function Choose(props: ThreeElements['group']) {
         <planeGeometry
           args={[1, welcome.image.height / welcome.image.width, 1]}
         />
-        <meshBasicMaterial ref={welcomeMaterial} transparent map={welcome} />
+        <meshBasicMaterial
+          key={colorScheme}
+          {...inkProps}
+          ref={welcomeMaterial}
+          transparent
+          map={welcome}
+        />
       </mesh>
 
       {/* Choose */}
       <mesh position={[0, -h * 1.4, 0]}>
         <planeGeometry args={[1, which.image.height / which.image.width, 1]} />
-        <meshBasicMaterial ref={whichMaterial} transparent map={which} />
+        <meshBasicMaterial
+          key={colorScheme}
+          {...inkProps}
+          ref={whichMaterial}
+          transparent
+          map={which}
+        />
       </mesh>
       <animated.group position={polaroidPosition as unknown as Vector3}>
         <Slider
@@ -302,7 +353,7 @@ function Choose(props: ThreeElements['group']) {
                   <Text
                     scale={0.25}
                     font="/fonts/redaction/Redaction_35-Italic.ttf"
-                    color="black"
+                    color={dark ? 'white' : 'black'}
                     fillOpacity={0.8}
                     anchorX="left"
                     anchorY="middle"
@@ -313,7 +364,7 @@ function Choose(props: ThreeElements['group']) {
                     scale={0.115}
                     position={[0, -0.25, 0]}
                     font="/fonts/space-mono/SpaceMono-Regular.ttf"
-                    color="#bbb"
+                    color={dark ? '#78716c' : '#bbb'}
                     anchorX="left"
                     anchorY="middle"
                   >

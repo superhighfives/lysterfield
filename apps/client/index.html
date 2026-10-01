@@ -15,6 +15,26 @@
     </script>
 
     <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Applies the dark theme before first paint, so a dark-mode visit
+         doesn't flash the light background while the bundle loads. Mirrors
+         src/utils/theme.ts (same 'theme' storage key), which takes over
+         once React mounts. -->
+    <script>
+      ;(function () {
+        var preference = null
+        try {
+          preference = localStorage.getItem('theme')
+        } catch (e) {}
+        var dark =
+          preference === 'dark' ||
+          (preference !== 'light' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches)
+        if (dark) document.documentElement.classList.add('dark')
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      })()
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -112,7 +132,7 @@
       crossorigin="anonymous"
     />
   </head>
-  <body class="bg-stone-100 text-stone-900">
+  <body class="bg-stone-100 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -7,9 +7,17 @@ import Fallback from '../components/fallback'
 import Scene from '../components/scene'
 import Playhead from '../components/playhead'
 import Viewport from '../components/viewport'
+import ThemeToggle from '../components/theme-toggle'
 import { handleDeviceOrientationPermissions, isTouchDevice, shuffle } from '../utils'
 import dreams from '../dreams.json'
 import { Play, FileText, CircleNotch } from '@phosphor-icons/react'
+import { useHistorySync } from '../utils/use-history-sync'
+
+// How long buffering has to last before offering the YouTube escape hatch.
+const TOO_SLOW_DELAY = 8000
+
+const linkClassName =
+  'px-2 py-1 flex gap-2 items-center hover:bg-yellow-400 hover:text-yellow-800 rounded hover:shadow-sm'
 
 function Root() {
   const dream = useStore((state) => state.dream)
@@ -23,6 +31,7 @@ function Root() {
   const [hasLoaded, setHasLoaded] = useState(false)
   const [isBuffering, setIsBuffering] = useState(false)
   const isTooSlow = useStore((state) => state.isTooSlow)
+  const setIsTooSlow = useStore((state) => state.setIsTooSlow)
   const seeking = useStore((state) => state.seeking)
   const showPlayhead = useStore((state) => state.showPlayhead)
 
@@ -40,6 +49,24 @@ function Root() {
       setIsBuffering(false)
     }
   }, [videoState, dream])
+
+  // Each stretch of buffering gets its own timer, and isTooSlow clears as
+  // soon as playback recovers — this used to be a counter in Scene's
+  // useFrame that only ever counted up, so once a session had buffered for
+  // 8s in total (across any number of short stalls) the YouTube link stayed
+  // armed for every stall after, and before that the very first long stall
+  // could be cut short by time already spent buffering earlier.
+  useEffect(() => {
+    if (!isBuffering) {
+      setIsTooSlow(false)
+      return
+    }
+
+    const timeout = setTimeout(() => setIsTooSlow(true), TOO_SLOW_DELAY)
+    return () => clearTimeout(timeout)
+  }, [isBuffering])
+
+  useHistorySync(video)
 
   const handleReady = async () => {
     const orientationGranted = (await handleDeviceOrientationPermissions()) as boolean
@@ -59,17 +86,12 @@ function Root() {
   return (
     <>
       <div className="fixed z-10 top-1 right-1 flex gap-1 font-sans text-sm">
-        <a
-          href="/about"
-          className="px-2 py-1 flex gap-2 items-center hover:bg-yellow-400 hover:text-yellow-800 rounded hover:shadow-sm"
-        >
+        <ThemeToggle className={linkClassName} />
+        <a href="/about" className={linkClassName}>
           <FileText />
           About
         </a>
-        <a
-          href="https://wearebrightly.com"
-          className="px-2 py-1 flex gap-2 items-center hover:bg-yellow-400 hover:text-yellow-800 rounded hover:shadow-sm"
-        >
+        <a href="https://wearebrightly.com" className={linkClassName}>
           <Play />
           Get the song
         </a>
@@ -85,7 +107,7 @@ function Root() {
               }`}
             >
               <div
-                className={`bg-white shadow-xl pl-2 pr-3 py-2 rounded-full flex items-center self-center text-stone-700 gap-2 text-sm mb-2`}
+                className={`bg-white dark:bg-stone-800 shadow-xl pl-2 pr-3 py-2 rounded-full flex items-center self-center text-stone-700 dark:text-stone-200 gap-2 text-sm mb-2`}
               >
                 <CircleNotch className="animate-spin" size={20} />
                 {seeking ? 'Loading video...' : 'Buffering...'}
@@ -93,7 +115,7 @@ function Root() {
 
               <a
                 href={dream?.link}
-                className={`bg-yellow-400 shadow-xl px-4 py-1 rounded-full flex items-center text-stone-700 gap-2 text-xs hover:bg-black hover:text-white transition-opacity  ${
+                className={`bg-yellow-400 shadow-xl px-4 py-1 rounded-full flex items-center text-stone-700 gap-2 text-xs hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-opacity  ${
                   isTooSlow && !seeking
                     ? 'opacity-100'
                     : 'opacity-0 pointer-events-none'
@@ -115,7 +137,11 @@ function Root() {
         ) : hasLoaded ? (
           <div className="relative h-screen grid place-content-center space-y-2 text-center p-4">
             <video
-              className="mix-blend-multiply"
+              // multiply drops the loop's white background against the
+              // light page, but against a dark page it'd take the letters
+              // down with it — so dark mode keys the white out to
+              // transparency instead (the #key-white filter below).
+              className="mix-blend-multiply dark:mix-blend-normal dark:[filter:url(#key-white)]"
               width={512}
               height={512}
               autoPlay
@@ -126,8 +152,21 @@ function Root() {
               <source src="video/loop.webm" type="video/webm" />
               <source src="video/loop.mov" type="video/mp4" />
             </video>
+            {/* Alpha from inverted brightness: white (and the encoder's
+                near-white) goes fully transparent, the pale photo-filled
+                letters stay partly opaque, anything mid-tone or darker
+                stays solid. Scaled by the source's own alpha so the
+                filter region's transparent padding stays transparent. */}
+            <svg className="absolute w-0 h-0" aria-hidden="true">
+              <filter id="key-white" colorInterpolationFilters="sRGB">
+                <feColorMatrix
+                  type="matrix"
+                  values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  -1.7 -1.7 -1.7 5 0"
+                />
+              </filter>
+            </svg>
             <button
-              className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 hover:bg-black hover:text-white flex items-center gap-2 shadow`}
+              className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 text-stone-900 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black flex items-center gap-2 shadow`}
               onClick={handleReady}
             >
               <span className="uppercase">Brightly</span>

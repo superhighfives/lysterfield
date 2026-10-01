@@ -18,6 +18,17 @@ const uniforms = {
   uAvatar: 0,
   uFrameSketch: 0,
   uIdle: 0,
+  // How far the avatar's depth-map relief pushes toward the camera, in
+  // world units at full depth (depth panel = 1.0) and full fade-in.
+  uDepthStrength: 0,
+  // 0 = light, 1 = dark. Drives the intro/outro fade colour and the
+  // background that uBackgroundMix blends toward.
+  uDark: 0,
+  // Permanent blend of `image` toward the flat page background (white in
+  // light mode, black in dark mode) — 0 leaves the sampled colour alone.
+  // Only the lyrics mesh sets this, to knock its dream-video fill back so
+  // the text reads against either background.
+  uBackgroundMix: 0,
 }
 
 export const VideoMaterial = shaderMaterial(
@@ -28,6 +39,7 @@ export const VideoMaterial = shaderMaterial(
     uniform sampler2D uTexture;
     uniform float uFrameSelected;
     uniform float uFrameDepth;
+    uniform float uFrameMask;
     uniform float uFrameTotal;
     uniform float uOpacity;
     uniform float uFrameOverlay;
@@ -35,7 +47,32 @@ export const VideoMaterial = shaderMaterial(
     uniform vec2 uPointerRelative;
     varying vec2 texCoord;
     uniform float uTime;
-    
+    uniform float uDepthStrength;
+
+    // Samples one panel of the 7-panel atlas, clamped (like the fragment
+    // shader's localX) so a lookup never bleeds into the neighbouring panel.
+    float samplePanel(float panel, vec2 uv) {
+      float x = clamp(uv.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
+      return texture2D(uTexture, vec2((x + (panel - 1.0)) / uFrameTotal, clamp(uv.y, 0.0, 1.0))).r;
+    }
+
+    // How far inside the silhouette this vertex sits, 0 at the matte's edge
+    // rising to 1 at EDGE_RADIUS (in panel UV) or further in. Approximated
+    // from the matte's average coverage over a 5x5 neighbourhood: coverage
+    // is ~0.5 right on the edge and 1.0 once the whole neighbourhood is
+    // inside the person.
+    const float EDGE_RADIUS = 0.06;
+    float insideness(vec2 uv) {
+      float coverage = 0.0;
+      for (int x = -2; x <= 2; x++) {
+        for (int y = -2; y <= 2; y++) {
+          coverage += samplePanel(uFrameMask, uv + vec2(float(x), float(y)) * (EDGE_RADIUS / 2.0));
+        }
+      }
+      coverage /= 25.0;
+      return clamp((coverage - 0.5) * 2.0, 0.0, 1.0);
+    }
+
     void main(){
         vUv = uv;
         float intensity = 0.0;
@@ -43,9 +80,21 @@ export const VideoMaterial = shaderMaterial(
         float fadeAmount = clamp((uTime / 4.0) - 1.25, 0.0, 1.0);
 
         if(uFrameDepth != 0.0) {
-          vec4 mask = texture2D(uTexture, vec2((vUv.x + (uFrameDepth - 1.0)) / uFrameTotal, vUv.y));
-          float depth = ((mask.r + (vUv.y * 2.0)) / 8.0) * fadeAmount;
-          intensity = (0.75 * depth + 0.05);
+          // The whole plane leans back toward the bottom and sits a little
+          // forward — a flat offset, unaffected by the matte.
+          float lean = (0.1875 * vUv.y) * fadeAmount + 0.05;
+
+          // The depth map's relief is shaped by a quarter-circle profile
+          // over distance-from-edge, so the silhouette curves away like a
+          // real head and shoulders instead of the whole cut-out pushing
+          // forward as one slab. Outside the matte the relief is 0, which
+          // also drops the depth model's corner flutter on the hidden
+          // part of the plane.
+          float t = 1.0 - insideness(vUv);
+          float profile = sqrt(1.0 - t * t);
+          float relief = samplePanel(uFrameDepth, vUv) * profile * uDepthStrength * fadeAmount;
+
+          intensity = lean + relief;
         }
 
         vec3 newPosition = vec3(position.x, position.y, position.z + intensity);
@@ -69,6 +118,8 @@ export const VideoMaterial = shaderMaterial(
     uniform float uTime;
     uniform float uAvatar;
     uniform float uIdle;
+    uniform float uDark;
+    uniform float uBackgroundMix;
 
     vec3 blendMultiply(vec3 base, vec3 blend) {
       return base*blend;
@@ -143,10 +194,19 @@ export const VideoMaterial = shaderMaterial(
       float fadeAmount = 1.0 - clamp((uTime / 4.0) - 1.0, 0.0, 1.0);
       float extendedFadeAmount = 1.0 - clamp((uTime / 4.0), 0.25, 1.0);
 
-      vec3 colorA = vec3(0.912, 0.921, 0.929);
-      vec3 colorB = vec3(0.95, 0.95, 0.92);
+      // The intro/outro fade colour — a soft gradient close to the page
+      // background in each mode, so the scene fades in from (and out to)
+      // the page rather than flashing white in dark mode. Still called
+      // "white" since that's what it is in the light-mode default.
+      vec3 colorA = mix(vec3(0.912, 0.921, 0.929), vec3(0.047, 0.039, 0.035), uDark);
+      vec3 colorB = mix(vec3(0.95, 0.95, 0.92), vec3(0.11, 0.098, 0.09), uDark);
       vec3 color = mix(colorA, colorB, vUv.y);
       vec4 white = vec4(vec3(color), 1.0);
+
+      if(uBackgroundMix != 0.0) {
+        vec3 background = mix(vec3(1.0), vec3(0.0), uDark);
+        image = vec4(mix(image.rgb, background, uBackgroundMix), image.a);
+      }
 
       if(uFrameOverlay != 0.0) {
         fadeAmount = extendedFadeAmount;
