@@ -208,16 +208,26 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
             } as CSSProperties
           }
         >
-          <MediaController className="contents" noAutohide>
+          <MediaController className="contents" autohide="-1">
             {/* media-chrome auto-hides every non-media/poster slotted
-                control after 2s of pointer inactivity during playback
-                (`userinactive` host attribute) — built for overlaying
+                control after `autohide` seconds (default 2) of pointer
+                inactivity during playback — built for overlaying
                 controls on top of the video itself. Ours is a persistent
                 control bar below the video, not an overlay, so it should
-                never fade out on its own; `noAutohide` disables that
-                behavior. This is what caused the pill to render fully
-                blank (all its controls at opacity 0) a couple of seconds
-                into playback whenever the pointer stopped moving. */}
+                never fade out on its own. This is what caused the pill
+                to render fully blank (all its controls at opacity 0) a
+                couple of seconds into playback whenever the pointer
+                stopped moving.
+                `autohide={-1}` (not `noAutohide`) is the real fix:
+                `noAutohide` is a CSS-only opt-out matched via
+                `::slotted(...):not([noautohide])` against each
+                INDIVIDUAL slotted control's own attribute — setting it
+                on MediaController itself matches nothing and does
+                nothing. `autohide` is the actual JS-level switch
+                (`#scheduleInactive`/`#setInactive` both bail out when
+                it's negative), so it's the one that stops the
+                `userinactive` host attribute from ever being set, which
+                every opacity-hiding CSS rule is gated on anyway. */}
             {/* eslint-disable-next-line jsx-a11y/media-has-caption -- generated video has no dialogue/caption track to provide */}
             <video
               slot="media"
