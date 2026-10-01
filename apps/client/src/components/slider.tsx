@@ -80,7 +80,11 @@ export default function Slider({
           position: [
             (-y % (width * items.length)) + width * rank,
             0.4 + ((-y % (width * items.length)) + width * rank) / -10,
-            -(((-y % (width * items.length)) + width * rank - 1) / 2) * -1,
+            // Depth (Z) separation between adjacent cards — was half the
+            // horizontal (X) spacing, which wasn't enough to keep a
+            // rotated card's edge from visually crossing into its
+            // neighbor's screen position at steeper carousel angles.
+            -(((-y % (width * items.length)) + width * rank - 1) / 1.5) * -1,
           ],
           rotation: [
             0.1,
