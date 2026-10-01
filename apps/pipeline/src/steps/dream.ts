@@ -9,7 +9,7 @@ export interface DreamResult {
 }
 
 export interface DreamOptions {
-  /** Describes the reimagined look — the one creative choice that varies per take, so it's a caller-supplied prompt rather than a fixed constant like artwork.ts's. */
+  /** Describes the reimagined look — the one creative choice that varies per take, so it's a caller-supplied prompt rather than a fixed constant like artwork.ts's. `NO_PEOPLE_SUFFIX` is always appended on top of this — never rely on this prompt alone to keep people out. */
   prompt: string
   /** Name for this dream attempt — written to `7-dreams/<take>/frames/`, never overwriting another take. */
   take: string
@@ -22,6 +22,18 @@ export interface DreamOptions {
 
 const DEFAULT_STEP_FPS = 6
 const DEFAULT_SEED = 42
+
+/**
+ * Always appended to the caller-supplied prompt, never left to the caller
+ * to remember — both `dream-styletransfer-v2` and `dream-styletransfer-
+ * v2-fixed` in `real-15s-60fps` came back showing a recognisable person
+ * because the per-take prompt alone didn't hold the line. Panel 7 must
+ * always read as an abstract repainting of the scene's shapes/light/colour,
+ * never a person, no matter what creative direction a take's own prompt
+ * asks for.
+ */
+const NO_PEOPLE_SUFFIX =
+  " Abstract painterly reinterpretation of the scene's shapes, light, and colour only — dissolve any person, face, or human figure completely into brushwork, texture, and form indistinguishable from the rest of the scene. Never depict a recognisable person or body."
 
 /**
  * `black-forest-labs/flux-kontext-dev`, once per kept frame — see
@@ -73,7 +85,7 @@ export async function dream(job: Job, sourceFramesDir: string, opts: DreamOption
         MODELS.dream,
         {
           input_image: await readFileAsInput(path.join(sourceFramesDir, frame)),
-          prompt: opts.prompt,
+          prompt: opts.prompt + NO_PEOPLE_SUFFIX,
           aspect_ratio: 'match_input_image',
           guidance: 2.5,
           seed,
