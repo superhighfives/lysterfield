@@ -1,6 +1,14 @@
 import { create } from 'zustand'
 import { Dream } from './utils/types'
 import { Vector2 } from 'three'
+import {
+  ColorScheme,
+  ThemePreference,
+  readThemePreference,
+  resolveColorScheme,
+} from './utils/theme'
+
+export type Resume = { dreamId: string; time: number }
 
 export interface AppState {
   dream: Dream | null
@@ -25,6 +33,14 @@ export interface AppState {
   globalPointer: Vector2
   resetInitialRotation: boolean
   isTooSlow: boolean
+  /** What the user picked in the theme toggle — 'system' follows
+   *  prefers-color-scheme. */
+  themePreference: ThemePreference
+  /** The resolved scheme actually showing, after applying `system`. */
+  colorScheme: ColorScheme
+  /** Playback position to seek to once that dream's video has loaded (set
+   *  when restoring from browser history), consumed by Playhead. */
+  resume: Resume | null
   setDream: (dream: Dream | null) => void
   setResetting: (resetting: boolean) => void
   setSeeking: (seeking: boolean) => void
@@ -41,6 +57,9 @@ export interface AppState {
   setGlobalPointer: (globalPointer: Vector2) => void
   setReady: (ready: boolean) => void
   setIsTooSlow: (ready: boolean) => void
+  setThemePreference: (themePreference: ThemePreference) => void
+  setColorScheme: (colorScheme: ColorScheme) => void
+  setResume: (resume: Resume | null) => void
 }
 
 export const useStore = create<AppState>()((set) => ({
@@ -60,6 +79,9 @@ export const useStore = create<AppState>()((set) => ({
   globalPointer: new Vector2(0, 0),
   resetInitialRotation: true,
   isTooSlow: false,
+  themePreference: readThemePreference(),
+  colorScheme: resolveColorScheme(readThemePreference()),
+  resume: null,
   setDream: (dream: Dream | null) => set({ dream }),
   setResetting: (resetting: boolean) => {
     set(() => ({ resetting }))
@@ -88,4 +110,8 @@ export const useStore = create<AppState>()((set) => ({
   setReady: (ready: boolean) => set(() => ({ ready })),
   setIsTooSlow: (isTooSlow: boolean) => set(() => ({ isTooSlow })),
   setSeeking: (seeking: boolean) => set(() => ({ seeking })),
+  setThemePreference: (themePreference: ThemePreference) =>
+    set(() => ({ themePreference })),
+  setColorScheme: (colorScheme: ColorScheme) => set(() => ({ colorScheme })),
+  setResume: (resume: Resume | null) => set(() => ({ resume })),
 }))

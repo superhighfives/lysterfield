@@ -48,9 +48,55 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
     const setSeeking = useStore((state) => state.setSeeking)
     const setVideoPlaying = useStore((state) => state.setVideoPlaying)
     const setVideoState = useStore((state) => state.setVideoState)
+    const setResume = useStore((state) => state.setResume)
 
+    // load() and play() live in this one effect, in that order. They used to
+    // be two separate `[dream]` effects in two components (this one and
+    // views/main.tsx) with nothing ordering them — when load() landed after
+    // play(), it aborted the pending play, the rejection went unobserved,
+    // and the video sat paused on its first frame.
     useEffect(() => {
-      ;(ref as MutableRefObject<HTMLVideoElement>).current.load()
+      const el = (ref as MutableRefObject<HTMLVideoElement>).current
+      el.load()
+      if (!dream) return
+
+      let cancelled = false
+
+      // Set when restoring from browser history — seek there as soon as
+      // the new source's duration is known. Only cleared once the seek
+      // actually happens, so StrictMode's double-run doesn't drop it.
+      const resume = useStore.getState().resume
+      const seek = () => {
+        if (resume!.time < el.duration) el.currentTime = resume!.time
+        setResume(null)
+      }
+
+      if (resume?.dreamId === dream.id) {
+        el.addEventListener('loadedmetadata', seek, { once: true })
+      }
+
+      const play = (retry: boolean) =>
+        el.play().catch((error: DOMException) => {
+          if (cancelled) return
+          // An AbortError means something reset the element mid-load; try
+          // once more when it's next ready rather than leaving it stuck.
+          // Anything else (e.g. the browser's autoplay policy refusing
+          // unmuted playback) won't change on a retry — the play button is
+          // still there.
+          if (retry && error.name === 'AbortError') {
+            el.addEventListener('canplay', () => !cancelled && play(false), {
+              once: true,
+            })
+          } else {
+            console.warn(`Playback didn't start: ${error.name}`)
+          }
+        })
+      play(true)
+
+      return () => {
+        cancelled = true
+        el.removeEventListener('loadedmetadata', seek)
+      }
     }, [dream])
 
     // Syncs native <video> playback state into the store directly, rather
@@ -148,7 +194,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           className={`fixed z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`}
         >
           <button
-            className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 active:bg-black active:text-white flex items-center gap-2 shadow-xl transition-opacity duration-500 ${
+            className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 text-stone-900 active:bg-black active:text-white flex items-center gap-2 shadow-xl transition-opacity duration-500 ${
               showPlayhead && recalibrateMobile && polaroidPillVisible
                 ? ''
                 : 'pointer-events-none opacity-0'
@@ -160,7 +206,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
           </button>
         </div>
         <div
-          className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[34px] bg-white border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity xs:[--media-control-padding:4px] ${
+          className={`fixed z-10 bottom-10 left-1/2 -translate-x-1/2 w-[calc(100vw-4rem)] max-w-[400px] h-[104px] xs:h-[34px] bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100 border border-yellow-400 rounded-lg xs:rounded-full shadow-xl transition-opacity xs:[--media-control-padding:4px] ${
             showPlayhead && polaroidPillVisible
               ? ''
               : 'pointer-events-none opacity-0'
@@ -268,7 +314,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
               <div className="flex self-stretch justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
                 <Footer />
                 <div className="group flex relative">
-                  <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2 xs:px-2 xs:py-1">
+                  <MediaMuteButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1">
                     {/*
                       media-chrome-button's shadow CSS sizes slotted icons
                       via `width: var(--media-button-icon-width)` plus
@@ -301,7 +347,7 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                   <Tooltip text="Toggle mute" />
                 </div>
                 <div className="group flex relative">
-                  <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 pr-4 py-2 xs:px-2 xs:pr-3 xs:py-1">
+                  <MediaPlayButton className="transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 pr-4 py-2 xs:px-2 xs:pr-3 xs:py-1">
                     <Play
                       slot="play"
                       className="!w-5 !h-5 xs:!w-4 xs:!h-4 !max-w-none !min-w-0"
@@ -318,14 +364,14 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                 <MediaTimeDisplay className="font-mono text-xs" />
                 <MediaTimeRange
                   className="grow h-4
-                    [&::part(track)]:bg-slate-300/40 [&::part(track)]:rounded-full [&::part(track)]:h-2
-                    [&::part(buffered)]:bg-slate-300/60 [&::part(buffered)]:rounded-full
+                    [&::part(track)]:bg-slate-300/40 dark:[&::part(track)]:bg-stone-600/40 [&::part(track)]:rounded-full [&::part(track)]:h-2
+                    [&::part(buffered)]:bg-slate-300/60 dark:[&::part(buffered)]:bg-stone-500/60 [&::part(buffered)]:rounded-full
                     [&::part(progress)]:bg-yellow-400 [&::part(progress)]:rounded-full
-                    [&::part(thumb)]:bg-slate-50 [&::part(thumb)]:border [&::part(thumb)]:border-solid [&::part(thumb)]:border-yellow-500 [&::part(thumb)]:w-4 [&::part(thumb)]:h-4 [&::part(thumb)]:rounded-full"
+                    [&::part(thumb)]:bg-slate-50 dark:[&::part(thumb)]:bg-stone-900 [&::part(thumb)]:border [&::part(thumb)]:border-solid [&::part(thumb)]:border-yellow-500 [&::part(thumb)]:w-4 [&::part(thumb)]:h-4 [&::part(thumb)]:rounded-full"
                 >
                   <MediaPreviewTimeDisplay
                     slot="preview"
-                    className="text-gray-400 font-mono bg-white text-xs px-2 rounded-full tracking-wider pointer-events-none"
+                    className="text-gray-400 font-mono bg-white dark:bg-stone-900 text-xs px-2 rounded-full tracking-wider pointer-events-none"
                   />
                 </MediaTimeRange>
               </div>

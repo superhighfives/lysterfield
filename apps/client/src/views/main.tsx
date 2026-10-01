@@ -1,5 +1,5 @@
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
-import { RefObject, useEffect, useRef } from 'react'
+import { RefObject, useRef } from 'react'
 import { VideoMaterial, VideoMaterialProps } from '../materials/video-material'
 import Polaroid from '../models/polaroid'
 import { isVideoPlaying } from '../utils'
@@ -19,6 +19,15 @@ import { animated, config, useSpring } from '@react-spring/three'
 // eslint-disable-next-line import/named -- useIdle is a real export (confirmed at runtime); eslint-plugin-import's static resolver doesn't handle this package's minimal `exports` map correctly
 import { useIdle } from '@uidotdev/usehooks'
 
+// World units the avatar's depth-map relief pushes toward the camera at
+// full depth. Was effectively 0.094 (0.75 / 8) before the relief was
+// tapered to round off at the silhouette's edge — that taper is what
+// makes a stronger push read as a rounder figure rather than a thicker
+// slab, see video-material.tsx's vertex shader. Tuned by eye on
+// 20230808103741: 0.35 started smearing near features (a raised hand)
+// across the plane, 0.2 adds clear separation without that.
+const DEPTH_STRENGTH = 0.2
+
 function Main(
   props: ThreeElements['group'] & {
     video: RefObject<HTMLVideoElement | null>
@@ -34,19 +43,13 @@ function Main(
     (isVisible) => (polaroidVisible.current = isVisible)
   )
 
-  const ready = useStore((state) => state.ready)
   const dream = useStore((state) => state.dream)
   const resetting = useStore((state) => state.resetting)
   const isMobile = useStore((state) => state.isMobile)
   const isTouch = useStore((state) => state.isTouch)
   const setGlobalPointer = useStore((state) => state.setGlobalPointer)
-
-  useEffect(() => {
-    console.log(`Starting playback: ${ready}`)
-    if (dream?.id) {
-      videoElement.play()
-    }
-  }, [dream])
+  const colorScheme = useStore((state) => state.colorScheme)
+  const dark = colorScheme === 'dark' ? 1 : 0
 
   const gl = useThree((state) => state.gl)
 
@@ -56,10 +59,17 @@ function Main(
         const texture = new VideoTexture(videoElement)
         texture.colorSpace = gl.outputColorSpace
 
-        if (videoElement.readyState === 4) {
+        // Checks for the same state the listener below waits for. This used
+        // to check for HAVE_ENOUGH_DATA (4) instead, so landing here after
+        // `loadedmetadata` had already fired but before the element reached
+        // 4 waited on an event that never comes — the scene sat on the
+        // loading screen forever.
+        if (videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
           res(texture)
         } else {
-          videoElement.addEventListener('loadedmetadata', () => res(texture))
+          videoElement.addEventListener('loadedmetadata', () => res(texture), {
+            once: true,
+          })
         }
       }),
     [videoElement]
@@ -224,6 +234,7 @@ function Main(
               uFrameMask={3}
               uOpacity={1}
               uFrameOverlay={3}
+              uDark={dark}
             />
           }
         />
@@ -247,6 +258,8 @@ function Main(
             uAvatar={1}
             uOpacity={1}
             uMaskIntensity={1}
+            uDepthStrength={DEPTH_STRENGTH}
+            uDark={dark}
           />
         </animated.mesh>
 
@@ -263,6 +276,8 @@ function Main(
             uFrameTotal={7}
             uInvert={1}
             uOpacity={1}
+            uBackgroundMix={0.5}
+            uDark={dark}
           />
         </mesh>
       </animated.group>

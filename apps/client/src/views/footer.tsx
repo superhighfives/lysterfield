@@ -14,7 +14,7 @@ function Footer() {
     <>
       <button
         onClick={() => setResetting(true)}
-        className="xs:rounded-l-full group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 pl-5 pr-3 py-2 xs:pl-4 xs:pr-2 xs:py-1"
+        className="xs:rounded-l-full group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 pl-5 pr-3 py-2 xs:pl-4 xs:pr-2 xs:py-1"
       >
         <SkipBack className="w-5 h-5 xs:w-4 xs:h-4" />
         <Tooltip text="Return to home" />
@@ -22,7 +22,7 @@ function Footer() {
       {isMobile ? (
         <button
           onClick={() => setResetInitialRotation(true)}
-          className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2 xs:px-2 xs:py-1"
+          className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1"
         >
           <CameraRotate className="w-5 h-5 xs:w-4 xs:h-4" />
           <Tooltip text="Reorient mobile" />
@@ -30,7 +30,7 @@ function Footer() {
       ) : null}
       {dream ? (
         <a
-          className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 px-3 py-2 xs:px-2 xs:py-1"
+          className="group relative flex items-center transition-colors hover:text-yellow-600 hover:bg-yellow-200 dark:hover:text-yellow-400 dark:hover:bg-yellow-400/20 px-3 py-2 xs:px-2 xs:py-1"
           href={dream.link}
         >
           <YoutubeLogo className="w-5 h-5 xs:w-4 xs:h-4" />

@@ -250,45 +250,131 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
 
 ## Tasks
 
-- [ ] Dark mode: scope which surfaces get dark variants, pick
-      toggle-vs-`prefers-color-scheme`, implement.
-- [ ] Lyric text: mode-aware background uniform + 50% video-opacity mix
-      in the lyrics `videoMaterial` fragment shader path.
-- [ ] Depth shader: round the avatar silhouette's edges using its existing
-      alpha matte, replacing the current flat intensity floor.
-- [ ] Depth shader: increase overall intensity once edge-rounding is in,
-      tuned across multiple dreams.
-- [ ] Buffering: wire up the currently-dead `isTooSlow` flag to a real
-      timeout; evaluate prefetching the selected dream's video earlier.
-- [ ] Fix the `load()`/`play()` race between `playhead.tsx` and
-      `main.tsx` causing videos to stick on frame 0.
-- [ ] Browser back/forward: push/restore dream selection (and ideally
-      playback position) via the History API; evaluate `target="_blank"`
-      for the YouTube link as a simpler complementary fix.
+- [x] Dark mode: system preference plus a manual toggle in the top-right
+      link row; covers the 2D UI, page/canvas background, the shader's
+      intro/outro fade colour, the choose screen's ink artwork and text,
+      the welcome splash, and the loading strip.
+- [x] Lyric text: `uBackgroundMix={0.5}` on the lyrics mesh blends its
+      dream-video fill 50% toward white (light) or black (dark).
+- [x] Depth shader: relief tapered to 0 at the silhouette edge with a
+      quarter-circle profile computed from the avatar's own matte.
+- [~] Depth shader: strength raised from ~0.094 to 0.2, by eye on **one**
+      dream (`20230808103741`) only. Still needs a check across several.
+- [x] Buffering: `isTooSlow` now runs on a per-stall timer that resets
+      (see Implementation notes: it wasn't dead, it was broken).
+      Prefetching looked at and not done.
+- [x] Fixed the `load()`/`play()` race causing videos to stick on frame 0.
+- [x] Browser back/forward: `?dream=<id>` URL plus `{ dream, t }` history
+      state, restored on popstate and on cold load. All links stay
+      same-tab (decision below).
 
-## Open questions
+## Decisions (were open questions)
 
-- **Dark mode trigger**: automatic via `prefers-color-scheme`, a manual
-  toggle control (and if so, where — the top-right link row in
-  `root.tsx` is the only persistent chrome today), or both? Affects
-  whether item 1 needs new UI at all.
-- **Dark mode scope**: does it need to reach into the 3D scene itself
-  (background color, polaroid/avatar material tints) or just the 2D
-  chrome (buttons, pills, links) plus the lyric-text background from
-  item 2? The user's own ask only explicitly covers the lyric text; the
-  rest of the dark-mode surface area needs scoping before implementation.
-- **Depth intensity target**: "more intense" has no numeric target yet —
-  needs an eyeballed pass against a few real dreams once edge-rounding
-  (item 3) is in, not a blind constant bump beforehand.
-- **Back/forward scope**: does "right back in the video" mean resuming
-  at the same timestamp, or just re-landing on the same dream (restarting
-  playback) being good enough? Also unclear whether `/about` needs the
-  same treatment given it isn't part of this app's own build (see
-  Context, item 7) — may be entirely out of scope, pending confirmation.
-- **YouTube link tab behavior**: opening it in a new tab (`target=
-  "_blank"`) would sidestep the back-button problem for that specific
-  link entirely, with no history-API work needed — worth confirming
-  whether that's an acceptable fix for that case specifically, separate
-  from the more general back/forward support the user is also asking for
-  (which the dream-selection flow needs regardless, since that never
-  leaves the SPA today but still has no shareable/restorable URL state).
+- **Dark mode trigger**: both. Follows `prefers-color-scheme` by default.
+  A toggle in the top-right link row flips whichever scheme is showing.
+  Flipping back to the OS's own scheme stores "follow system" again, so
+  there's no third state. The choice is saved in `localStorage.theme`,
+  and an inline script in `index.html` applies it before first paint.
+- **Dark mode scope**: the 2D UI plus the scene background, the lyric
+  background and the shader's fade colour. The polaroid model's own
+  materials are untouched.
+- **Depth intensity target**: 0.2 world units at full depth (see Tasks:
+  checked on one dream only).
+- **Back/forward scope**: restore both the dream and its timestamp.
+  `/about` gets no special handling. Coming back to the player is
+  handled by the cold-load restore.
+- **YouTube link tab behaviour**: no `target="_blank"` on any link. All
+  stay same-tab and rely on the history restore.
+
+## Implementation notes (deviations and findings)
+
+- **The plan's claim that `isTooSlow` was dead was wrong.**
+  `scene.tsx`'s `useFrame` did set it, from a `bufferingDelayRef` counter.
+  That counter only ever went up, never reset, and counted every frame
+  under `HAVE_FUTURE_DATA`. After 8s of total buffering in a session, the
+  YouTube link was armed for every later stall, and `isTooSlow` never
+  cleared. It's now a `setTimeout` in `root.tsx`, keyed on `isBuffering`:
+  each stall gets a fresh 8s timer, and the flag clears when playback
+  recovers.
+- **Found a second "stuck" bug: the scene could hang on the loading
+  screen forever.** `main.tsx`'s `suspend()` resolved only if
+  `readyState === 4`, and otherwise waited for `loadedmetadata`. If it ran
+  after `loadedmetadata` had already fired but before readyState reached
+  4, it waited for an event that had already happened. This reproduced
+  about one load in three in testing. It now resolves at
+  `>= HAVE_METADATA`, the same state the listener waits for.
+- **load/play race**: `main.tsx`'s separate `play()` effect is gone.
+  `playhead.tsx` calls `load()` and then `play()` in one effect. On an
+  `AbortError` it retries once on the next `canplay`. Other rejections,
+  such as an autoplay-policy refusal, are logged and left to the play
+  button. This is not a retry loop.
+- **Depth shader**: kept the old flat `+0.05` offset and the `vUv.y` lean
+  unchanged, since those are uniform and don't cause the slab look. The
+  depth-map relief is now multiplied by `sqrt(1 - t²)`, where `t` is
+  1 − "insideness". Insideness is the matte's average coverage over a
+  5×5 vertex-shader neighbourhood (radius 0.06 UV), remapped so 0.5 → 0
+  and 1.0 → 1. As a side effect, the relief is 0 outside the matte, which
+  also removes zoedepth's corner flutter on the hidden part of the plane.
+  The strength is the `uDepthStrength` uniform, set from `DEPTH_STRENGTH`
+  in `main.tsx`.
+- **Restore needs a scroll**: a dream restored from the URL arrives with
+  the page scrolled to the top, but the player sits at the bottom. So
+  `choose.tsx` scrolls drei's `ScrollControls` container to the bottom.
+  drei ignores scroll events until one frame after it attaches its
+  listener, so the jump is re-sent until `data.offset` actually moves.
+- **Resume position** is stored as `{ dreamId, time }`, not a bare
+  number. It's cleared only once the seek happens, so StrictMode's
+  double-run of effects doesn't drop it. A later card click also can't
+  inherit a stale resume time this way.
+- **Position saving**: `replaceState` runs on `timeupdate`, at most once
+  a second because Safari throttles at about 100 calls per 30s, and again
+  on `pagehide`. If the page comes back from bfcache it resumes, but only
+  if it was playing when the user left. In testing, Chrome never
+  bfcached this WebGL page, so returning was always a cold load.
+- **Dark-mode surfaces the plan didn't list**:
+  - The choose screen's welcome, choose and scroll-hint PNGs are black
+    ink on transparent. In dark mode they're inverted in the fragment
+    shader via `onBeforeCompile`, with the material keyed on the scheme so
+    it recompiles.
+  - The polaroid title and prompt `<Text>` colours.
+  - The welcome splash `<video>`, a colour photo on white. `multiply`
+    would turn it black in dark mode, and `invert` would make it a
+    negative, so dark mode uses an SVG `feColorMatrix` instead, which
+    turns white into transparency.
+  - The loading strip, which is greyscale, so a plain `invert` works.
+- **Prefetching: not done.** Selecting a card already triggers `load()`
+  in the same commit, so there's no real gap to close. Prefetching on
+  hover would download multi-MB videos the viewer may never watch.
+
+## Verified
+
+Checked in an isolated Chrome instance against the local dev server, in
+both schemes:
+
+- welcome splash, loading strip, choose screen, player and toggle
+- cold load of `?dream=…`: it scrolled to the player and autoplayed
+- in-app home → back resumed at the saved time → forward went home
+- leaving to another site → back cold-loaded the welcome screen with the
+  URL and time intact → entering resumed at the saved time
+- three reloads in a row with no loading hang
+
+`tsc`, `lint` and `build` are clean.
+
+**Not verified:**
+
+- Safari, including the SVG-filter splash and its stricter autoplay
+- mobile and touch
+- a real network stall triggering the YouTube link
+- depth on more than one dream
+
+## Open follow-ups
+
+- **Lyric legibility in light mode**: a 50% white mix over the
+  polaroid's white lower border reads quite faint. Dark mode is fine.
+  The amount is the `uBackgroundMix` prop in `main.tsx` if it wants
+  tuning.
+- **Pre-existing, not fixed here:** media-chrome sets `userinactive` on
+  the controller at load, even with `autohide="-1"`. Until the pointer
+  first moves, the control pill renders empty. That's unlikely when
+  choosing a card, but likely after a URL restore where the viewer only
+  clicks the welcome button.

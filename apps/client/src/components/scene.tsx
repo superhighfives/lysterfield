@@ -32,17 +32,13 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const setShowPlayhead = useStore((state) => state.setShowPlayhead);
 	const initialRotation = useStore((state) => state.initialRotation);
 	const resetting = useStore((state) => state.resetting);
-	const isTooSlow = useStore((state) => state.isTooSlow);
-	const setIsTooSlow = useStore((state) => state.setIsTooSlow);
-	const videoState = useStore((state) => state.videoState);
 
-	// These three all used to be React state set every frame from useFrame,
+	// These all used to be React state set every frame from useFrame,
 	// re-rendering Scene (and everything under it, including Choose's whole
 	// Slider) 60x/sec — see choose.tsx and main.tsx for the fuller writeup of
 	// this pattern. `globalPointer` in particular used to mirror the store's
 	// per-frame pointer value into local state purely so the dot mesh below
 	// could read it reactively; it's set directly on the mesh ref instead now.
-	const bufferingDelayRef = useRef(0);
 	const dotMesh = useRef<Mesh>(null);
 	const dotMaterial = useRef<MeshStandardMaterial>(null);
 
@@ -55,17 +51,8 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 		setShowPlayhead(dream !== null && !resetting);
 	}, [dream, resetting]);
 
-	useFrame((state, delta) => {
+	useFrame((state) => {
 		const cameraRef = camera.current;
-
-		if (videoState < HTMLMediaElement.HAVE_FUTURE_DATA) {
-			bufferingDelayRef.current += delta;
-
-			if (bufferingDelayRef.current >= 8 && !isTooSlow) {
-				console.log("Okay, maybe YouTube");
-				setIsTooSlow(true);
-			}
-		}
 
 		if (isMobile || isTouch) {
 			if (dotMaterial.current)
