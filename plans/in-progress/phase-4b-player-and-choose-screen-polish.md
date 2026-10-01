@@ -138,7 +138,9 @@ a worktree at the pre-migration commit (`bece8e8`: fiber 8.13.5/drei
 - [x] ~~Fix the zoom to match production's scale~~ — n/a, nothing was
       actually wrong.
 - [x] Reproduce and fix the playhead fade-out — was media-chrome's
-      autohide-on-inactivity; fixed via `noAutohide` (commit `6934b3c`).
+      autohide-on-inactivity; fixed via `autohide="-1"` (commit
+      `99a5c75`, after a false-start `noAutohide` fix at `6934b3c`
+      that didn't actually work — see context above).
 - [x] Fix the hover time-preview shadow/halo artifact on
       `MediaTimeRange`'s preview slot (commit `6934b3c`).
 - [x] Investigate missing audio — confirmed working as intended
@@ -148,6 +150,17 @@ a worktree at the pre-migration commit (`bece8e8`: fiber 8.13.5/drei
       design (commit `14f08c8`, desktop/`xs:` only).
 - [x] Once the above are fixed, do a dedicated pass on the general
       "janky/not smooth" feeling (commit `770ac72`).
+- [x] Fix choose-screen carousel cards overlapping/content bleeding
+      through neighbors (reported 2026-09-30, not in original scope).
+      Two attempts: a `renderOrder` fix for a transparency-sort theory
+      (commit `721c9b2`) that didn't actually resolve it when
+      re-checked live, then increased depth (Z) separation between
+      adjacent cards per the user's own diagnosis (commit `f245175`),
+      verified clean across several auto-scroll passes including both
+      stray `dream-v1`/`dream-styletransfer-v2-fixed` placeholder cards
+      at their steepest angle. Neither pass could reliably force the
+      *exact* originally-screenshotted moment on demand, so this is a
+      strong-but-not-ironclad fix — worth a final live look.
 - [ ] Re-verify against the live production reference after each fix —
       not yet done; production still hasn't been redeployed since the
       React 19 migration (`b878890`), so there's nothing current to
