@@ -346,6 +346,17 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
   in the same commit, so there's no real gap to close. Prefetching on
   hover would download multi-MB videos the viewer may never watch.
 
+- **Carousel size on large screens** (added on review): the choose
+  carousel is sized in world units, so it was the same share of the
+  canvas height on any screen — enormous on a big monitor. The group
+  around `Slider` now scales by `900 / canvasHeight`, clamped to
+  [0.6, 1], so laptops are unchanged and a 1300px-tall canvas renders it
+  at ~0.69×. Applied outside `Slider` on purpose: drei's `<Center>`
+  measures in its own local space (it resets its own `matrixWorld`
+  before `setFromObject`), so an ancestor scale doesn't disturb the
+  offset it bakes at mount — unlike the Z-separation change reverted in
+  a572be1.
+
 ## Verified
 
 Checked in an isolated Chrome instance against the local dev server, in

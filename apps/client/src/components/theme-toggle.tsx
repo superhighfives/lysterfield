@@ -1,19 +1,27 @@
-import { useEffect } from 'react'
-import { Moon, Sun } from '@phosphor-icons/react'
+import { KeyboardEvent, useEffect, useRef } from 'react'
+import { Desktop, Moon, Sun } from '@phosphor-icons/react'
 import { useStore } from '../store'
 import {
+  ThemePreference,
   applyColorScheme,
   darkQuery,
   resolveColorScheme,
-  toggledThemePreference,
   writeThemePreference,
 } from '../utils/theme'
+import Tooltip from '../views/tooltip'
 
-function ThemeToggle({ className }: { className?: string }) {
+const OPTIONS: { value: ThemePreference; label: string; Icon: typeof Sun }[] =
+  [
+    { value: 'system', label: 'System', Icon: Desktop },
+    { value: 'light', label: 'Light', Icon: Sun },
+    { value: 'dark', label: 'Dark', Icon: Moon },
+  ]
+
+function ThemeToggle() {
   const themePreference = useStore((state) => state.themePreference)
-  const colorScheme = useStore((state) => state.colorScheme)
   const setThemePreference = useStore((state) => state.setThemePreference)
   const setColorScheme = useStore((state) => state.setColorScheme)
+  const buttons = useRef<(HTMLButtonElement | null)[]>([])
 
   // Keeps the `.dark` class on <html> (Tailwind's `dark:` variants) and the
   // store's resolved `colorScheme` (the 3D scene's shader uniforms) in step
@@ -36,18 +44,58 @@ function ThemeToggle({ className }: { className?: string }) {
     return () => query.removeEventListener('change', update)
   }, [themePreference])
 
-  const isDark = colorScheme === 'dark'
+  // Standard radio-group keyboard behaviour: the group is a single tab
+  // stop, and the arrow keys move the selection (and focus) between options.
+  const handleKeyDown = (event: KeyboardEvent) => {
+    const step =
+      event.key === 'ArrowRight' || event.key === 'ArrowDown'
+        ? 1
+        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+        ? -1
+        : 0
+    if (!step) return
+    event.preventDefault()
+    const current = OPTIONS.findIndex((o) => o.value === themePreference)
+    const next = (current + step + OPTIONS.length) % OPTIONS.length
+    setThemePreference(OPTIONS[next].value)
+    buttons.current[next]?.focus()
+  }
 
   return (
-    <button
-      type="button"
-      onClick={() => setThemePreference(toggledThemePreference(colorScheme))}
-      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      className={className}
+    <div
+      role="radiogroup"
+      aria-label="Colour scheme"
+      className="flex items-center gap-0.5 p-0.5 rounded"
     >
-      {isDark ? <Sun /> : <Moon />}
-      {isDark ? 'Light' : 'Dark'}
-    </button>
+      {OPTIONS.map(({ value, label, Icon }, i) => {
+        const checked = value === themePreference
+        return (
+          <div key={value} className="group relative flex">
+            <button
+              ref={(el) => {
+                buttons.current[i] = el
+              }}
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              aria-label={label}
+              tabIndex={checked ? 0 : -1}
+              onClick={() => setThemePreference(value)}
+              onKeyDown={handleKeyDown}
+              className={`p-1.5 rounded transition-colors ${
+                checked
+                  ? 'bg-yellow-400 text-yellow-800 shadow-sm'
+                  : 'hover:bg-yellow-400/30'
+              }`}
+            >
+              <Icon />
+            </button>
+            {/* This row sits at the very top of the page — no room above. */}
+            <Tooltip text={label} placement="below" />
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
