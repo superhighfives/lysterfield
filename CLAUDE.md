@@ -41,6 +41,31 @@ read a fixed `uFrameTotal={7}` atlas at hardcoded indices: 1 = lyrics,
 7 = dream video. Don't reorder or resize the pipeline's composite output
 without updating both those files to match.
 
+## Dream panel (7) must never show a person
+
+Abstract reinterpretation only — shapes, light, and colour, never a
+recognisable person or face. `dream.ts` always appends a fixed
+`NO_PEOPLE_SUFFIX` to every take's prompt so this can't be forgotten
+per-take; don't bypass that by calling the model directly with a raw
+prompt. Both dream takes in `real-15s-60fps` (`dream-styletransfer-v2`,
+`dream-styletransfer-v2-fixed`) failed review for exactly this reason — a
+per-take prompt alone wasn't a strong enough guarantee.
+
+## Known per-frame artifact failure modes
+
+- **Matte (panel 4, `robust_video_matting`)**: occasionally glitches for a
+  second or two — a bad mask on a run of frames. Options being evaluated:
+  pre-contrasting input frames before matting, swapping to a newer
+  segmentation model, or a spot-check pass before a bad matte run feeds
+  `background-plate`/`compose`. Don't assume a completed matte run is
+  artifact-free.
+- **Depth (panel 5, `zoedepth`)**: sometimes adds flutter/artifacts in the
+  corners. Worth checking whether a newer depth model is a straightforward
+  swap.
+
+See `plans/backlog/frame-preview-approval-tool.md` for the planned
+per-scene review workflow these feed into.
+
 ## Secrets
 
 `REPLICATE_API_TOKEN` and friends live in `apps/pipeline/.env`, never
