@@ -1,6 +1,6 @@
 ---
 title: "Phase 4c: front-end polish — dark mode, depth shader, playback reliability, browser navigation"
-status: Ready
+status: In Progress
 created: 2026-09-30
 updated: 2026-09-30
 ---
