@@ -501,6 +501,29 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
   Light is now inverted and very subtle: a little shade in the middle
   (#efedea) brightening to #fafaf9 at the edges.
 
+- **Bigger cards, smaller scene (review).** The carousel group (around
+  `Slider`, so `<Center>` is unaffected) sits `CAROUSEL_FORWARD` = 0.15
+  toward the camera, so the cards are bigger with unchanged spacing and
+  fan. The camera is pulled back from 1.5 to 1.8 (`CAMERA_Z` in
+  `scene.tsx`). Layout is in viewport units (`h`), which grow with
+  distance, so everything keeps its place on screen and only shrinks.
+  0.35 forward was far too big (about four cards across), because the
+  fan already brings right-hand cards closer.
+- **Fireflies (review: "particles dancing around, like bugs around a
+  lake").** `components/fireflies.tsx` is a points shader. Each bug
+  wanders on slow overlapping sines, with a fast small jitter (darting)
+  and a flicker, all seeded per bug.
+  - Dark mode: warm glowing dots, drawn additively. Light mode: small
+    dark gnats with normal blending, since an additive glow vanishes on
+    a light page.
+  - Two layers, fixed in view (outside the scroll container):
+    - 70 behind. They're depth-tested, so the player polaroid hides
+      them, and drawn before the carousel layers, so cards cover them.
+    - 12 in front. Drawn last with no depth test.
+  - Each layer's order sits on a wrapping group, per the group-sorting
+    rule above.
+  - Skipped entirely under `prefers-reduced-motion`.
+
 ## Open follow-ups (review round)
 
 - **Glossy charcoal frames.** In dark mode, the player's polaroid (and

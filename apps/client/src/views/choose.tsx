@@ -44,6 +44,12 @@ const invertInk = (shader: { fragmentShader: string }) => {
   )
 }
 
+// How far the whole carousel sits toward the camera, in world units —
+// making the cards bigger on screen without changing their spacing or
+// fan. Applied to the group around Slider, like the scale below, so
+// drei's <Center> inside it is unaffected.
+const CAROUSEL_FORWARD = 0.15
+
 const CAROUSEL_REFERENCE_HEIGHT = 900
 const CAROUSEL_MIN_SCALE = 0.6
 
@@ -145,7 +151,7 @@ function Choose(props: ThreeElements['group']) {
   )
 
   const [{ position: polaroidPosition }, polaroidApi] = useSpring(() => ({
-    position: [0, -h * 1.8, 0],
+    position: [0, -h * 1.8, CAROUSEL_FORWARD],
     config: { ...config.molasses, precision: 0.0000001 },
   }))
 
@@ -172,7 +178,11 @@ function Choose(props: ThreeElements['group']) {
       : MathUtils.lerp(polaroidVisibilityRef.current, 0, 0.1)
     polaroidVisibilityRef.current = nextPolaroidVisibility
     polaroidApi.start({
-      position: [0, -h * (1.8 + (1 - nextPolaroidVisibility) * 2), 0],
+      position: [
+        0,
+        -h * (1.8 + (1 - nextPolaroidVisibility) * 2),
+        CAROUSEL_FORWARD,
+      ],
     })
 
     const nextWelcomeVisibility = MathUtils.lerp(

@@ -20,6 +20,7 @@ import { useStore } from "../store";
 import { getRotation } from "../utils";
 import Choose from "../views/choose";
 import Main from "../views/main";
+import Fireflies from "./fireflies";
 
 // Half-angle of the choose screen's pointer-following light cone. With a
 // full penumbra, brightness falls off smoothly from the centre to this edge.
@@ -29,7 +30,10 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const camera = useRef<PerspectiveCameraType>(null);
 	const { viewport } = useThree((state) => state);
 	const { width: w, height: h } = viewport;
-	const CAMERA_Z = 1.5;
+	// Pulled back from 1.5 to shrink the whole scene a little. Layout
+	// positions are in viewport units (`h`), which grow with the distance,
+	// so things keep their place on screen and only get smaller.
+	const CAMERA_Z = 1.8;
 	const isMobile = useStore((state) => state.isMobile);
 	const isTouch = useStore((state) => state.isTouch);
 
@@ -195,6 +199,8 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 				/>
 				<primitive object={spotlight.target} />
 			</group>
+
+			<Fireflies />
 
 			<ScrollControls pages={2.7} damping={0.1}>
 				<Scroll>
