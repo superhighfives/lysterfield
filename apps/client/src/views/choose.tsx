@@ -15,7 +15,7 @@ import {
 } from '@react-three/drei'
 import { animated, useSpring, config, a } from '@react-spring/three'
 import { useStore } from '../store'
-import Slider, { ABOVE_CAROUSEL_RENDER_ORDER } from '../components/slider'
+import Slider from '../components/slider'
 import dreams from '../dreams.json'
 
 // Warms suspend-react's cache (the mechanism behind every useTexture call in
@@ -286,28 +286,18 @@ function Choose(props: ThreeElements['group']) {
         />
       </mesh>
 
-      {/* Choose — drawn after the carousel's card layers (see slider.tsx),
-          which would otherwise paint over it when the camera dollies in.
-          The order goes on a wrapping group: three.js sorts transparent
-          objects by their nearest group's renderOrder before their own. */}
-      <group
-        ref={(el) => {
-          if (el) el.renderOrder = ABOVE_CAROUSEL_RENDER_ORDER
-        }}
-      >
-        <mesh position={[0, -h * 1.4, 0]}>
-          <planeGeometry
-            args={[1, which.image.height / which.image.width, 1]}
-          />
-          <meshBasicMaterial
-            key={colorScheme}
-            {...inkProps}
-            ref={whichMaterial}
-            transparent
-            map={which}
-          />
-        </mesh>
-      </group>
+      {/* Choose — the carousel's card layers (see slider.tsx) draw over
+          this where they overlap it, which is intended. */}
+      <mesh position={[0, -h * 1.4, 0]}>
+        <planeGeometry args={[1, which.image.height / which.image.width, 1]} />
+        <meshBasicMaterial
+          key={colorScheme}
+          {...inkProps}
+          ref={whichMaterial}
+          transparent
+          map={which}
+        />
+      </mesh>
       <animated.group
         position={polaroidPosition as unknown as Vector3}
         scale={carouselScale}

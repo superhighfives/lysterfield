@@ -2,7 +2,7 @@
 title: "Phase 4c: front-end polish — dark mode, depth shader, playback reliability, browser navigation"
 status: In Progress
 created: 2026-09-30
-updated: 2026-09-30
+updated: 2026-10-02
 ---
 
 # Phase 4c: front-end polish — dark mode, depth shader, playback reliability, browser navigation
@@ -467,14 +467,15 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
     `--bowl-edge` in `index.css`). In dark mode it's #24201e to #0c0a09;
     in light mode, a very subtle #fafaf9 to #eceae7.
   - The canvas is transparent, so the bowl shows through.
-- **Heading under the cards (regression from layering, fixed).** Cards
-  now draw last with depth cleared, so they painted over the "Where are
-  we going?" heading.
-  - It's now wrapped in a group with `ABOVE_CAROUSEL_RENDER_ORDER`
-    (5000). It has to be the group: three.js sorts transparent objects
-    by their nearest Group's renderOrder before their own.
-  - The same rule is what makes the per-card ordering work. The slider's
-    traversal stamps card groups too.
+- **Cards draw over the heading (intended).** Since the layering draws
+  cards last with depth cleared, cards paint over the "Where are we
+  going?" heading wherever they overlap it, for example when the camera
+  dollies in. I briefly lifted the heading above the cards; it was
+  reverted on review, because covering the heading is the look we want.
+  If something ever does need to draw over the carousel, it needs its
+  renderOrder on a wrapping *group*: three.js sorts transparent objects
+  by their nearest Group's renderOrder before their own. The slider's
+  per-card ordering relies on the same rule.
 
 ## Open follow-ups (review round)
 
