@@ -8,6 +8,7 @@ import Scene from '../components/scene'
 import Playhead from '../components/playhead'
 import Viewport from '../components/viewport'
 import ThemeToggle from '../components/theme-toggle'
+import KeyWhiteFilter from '../components/key-white-filter'
 import { handleDeviceOrientationPermissions, isTouchDevice, shuffle } from '../utils'
 import dreams from '../dreams.json'
 import { Play, FileText, CircleNotch } from '@phosphor-icons/react'
@@ -85,6 +86,7 @@ function Root() {
 
   return (
     <>
+      <KeyWhiteFilter />
       <div className="fixed z-10 top-1 right-1 flex items-center gap-1 font-sans text-sm">
         <ThemeToggle />
         <a href="/about" className={linkClassName}>
@@ -140,7 +142,7 @@ function Root() {
               // multiply drops the loop's white background against the
               // light page, but against a dark page it'd take the letters
               // down with it — so dark mode keys the white out to
-              // transparency instead (the #key-white filter below).
+              // transparency instead (see components/key-white-filter.tsx).
               className="mix-blend-multiply dark:mix-blend-normal dark:[filter:url(#key-white)]"
               width={512}
               height={512}
@@ -152,19 +154,6 @@ function Root() {
               <source src="video/loop.webm" type="video/webm" />
               <source src="video/loop.mov" type="video/mp4" />
             </video>
-            {/* Alpha from inverted brightness: white (and the encoder's
-                near-white) goes fully transparent, the pale photo-filled
-                letters stay partly opaque, anything mid-tone or darker
-                stays solid. Scaled by the source's own alpha so the
-                filter region's transparent padding stays transparent. */}
-            <svg className="absolute w-0 h-0" aria-hidden="true">
-              <filter id="key-white" colorInterpolationFilters="sRGB">
-                <feColorMatrix
-                  type="matrix"
-                  values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  -1.7 -1.7 -1.7 5 0"
-                />
-              </filter>
-            </svg>
             <button
               className={`whitespace-nowrap fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-1 rounded-md px-4 py-2 bg-yellow-400 text-stone-900 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black flex items-center gap-2 shadow`}
               onClick={handleReady}

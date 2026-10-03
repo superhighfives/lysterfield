@@ -477,6 +477,30 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
   by their nearest Group's renderOrder before their own. The slider's
   per-card ordering relies on the same rule.
 
+- **White keying, round 2 (review: "white frost on the letters", the
+  loading strip's black band).** Both now go through one shared SVG filter,
+  `components/key-white-filter.tsx`, mounted once at the top of the app.
+  It has three steps:
+  - Coverage from inverted brightness, 4 × (2.88 − r − g − b). The zero
+    point is exactly the strip's #f5f5f5 background. It's steep because
+    both pieces of artwork have a lot of pale lettering just below that;
+    gentler curves either left a faint band or keyed letters away.
+  - A 1px choke. A brightness key reads a dark shape's soft edge (the
+    splash's tree silhouettes against white) as fully opaque light grey,
+    which was the frost.
+  - Un-mixing the white with an arithmetic composite (pixel + coverage −
+    1), so semi-transparent edges carry the letter's colour, not white.
+  - The filter region is clipped to the element; Chrome painted the
+    default 10% padding opaque black.
+  - The loading strip is no longer inverted in dark mode. Its background
+    is keyed out on its own layer behind the card (which gets explicit
+    dark styles), so it sits on the page gradient in both modes.
+  - On a slow connection the strip's JPEG paints top-down. That isn't
+    new, but it looked like clipping while testing under throttle.
+- **Gradients (review).** Dark is slightly darker: #1a1715 to #0a0908.
+  Light is now inverted and very subtle: a little shade in the middle
+  (#efedea) brightening to #fafaf9 at the edges.
+
 ## Open follow-ups (review round)
 
 - **Glossy charcoal frames.** In dark mode, the player's polaroid (and
