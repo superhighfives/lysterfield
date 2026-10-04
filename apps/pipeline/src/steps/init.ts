@@ -65,7 +65,10 @@ export async function init(jobDir: string, opts: InitOptions): Promise<InitResul
     if (opts.length !== undefined) args.push('-t', String(opts.length))
     args.push(
       '-filter:v',
-      "crop=w='min(min(iw\\,ih)\\,1280)':h='min(min(iw\\,ih)\\,1280)',scale=1280:1280,setsar=1",
+      // Crop to the full centered square first, *then* scale — capping the
+      // crop itself at 1280 would take a zoomed-in center crop of any source
+      // larger than 1280px (e.g. the legacy 2160px `main-compiled-full.mov`).
+      "crop=w='min(iw\\,ih)':h='min(iw\\,ih)',scale=1280:1280,setsar=1",
       croppedVideoPath
     )
     await execFileAsync('ffmpeg', args)
