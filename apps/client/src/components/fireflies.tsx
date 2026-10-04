@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
+import { useScroll } from '@react-three/drei'
 import {
   AdditiveBlending,
   BufferAttribute,
@@ -25,14 +26,19 @@ import { useStore } from '../store'
 // three.js sorts transparent objects by their nearest group's renderOrder
 // before their own, so each layer's order goes on a wrapping group.
 //
-// Fixed in view (rendered outside the scroll container), so the swarm stays
-// with the viewer while the page scrolls underneath it. While a video plays
+// Fixed in view (rendered outside the scrolling content), drifting with the
+// page by only a fraction of its scroll — a little parallax. While a video plays
 // the bugs fly off out of frame, and drift back when it stops. Skipped entirely for
 // people who've asked for reduced motion.
 
-// How quickly the swarm clears out when a video starts (and drifts back
-// when it stops), as a MathUtils.damp rate — roughly a few seconds.
-const SCATTER_RATE = 0.8
+// How quickly the swarm clears out when a video starts, and comes back
+// when it stops, as MathUtils.damp rates: a few seconds out, well under a
+// second back.
+const SCATTER_RATE_OUT = 0.8
+const SCATTER_RATE_BACK = 5
+// The swarm's vertical band, as a multiple of the viewport height — a
+// little taller than the frame so the scroll-parallax wrap happens off it.
+const SPREAD_Y = 1.3
 
 const BACK_COUNT = 70
 const FRONT_COUNT = 12
@@ -48,6 +54,9 @@ const vertexShader = /* glsl */ `
   uniform float uPixelRatio;
   uniform float uScatter;
   uniform float uExtent;
+  uniform float uScroll;
+  uniform float uParallax;
+  uniform float uSpreadY;
   varying float vFlicker;
 
   void main() {
@@ -73,7 +82,13 @@ const vertexShader = /* glsl */ `
     float leave = smoothstep(0.0, 1.0, clamp(uScatter * 1.6 - s.z * 0.6, 0.0, 1.0));
     vec3 scatter = vec3(away * leave * leave * uExtent * (1.0 + s.y), 0.0);
 
-    vec4 mvPosition = modelViewMatrix * vec4(position + wander + dart + scatter, 1.0);
+    // Scroll parallax: the swarm drifts with the page by a fraction of its
+    // scroll (more for the near layer), wrapping within its own band so it
+    // never runs out — the wrap happens just past the frame's edge.
+    vec3 base = position;
+    base.y = mod(base.y + uScroll * uParallax + uSpreadY * 0.5, uSpreadY) - uSpreadY * 0.5;
+
+    vec4 mvPosition = modelViewMatrix * vec4(base + wander + dart + scatter, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     gl_PointSize = uSize * uPixelRatio * (1.0 / -mvPosition.z) * (0.6 + s.x * 0.8);
 
@@ -119,16 +134,20 @@ function Swarm({
   depth,
   renderOrder,
   depthTest,
+  parallax,
 }: {
   count: number
   /** [near, far] z range, in world units. */
   depth: [number, number]
   renderOrder: number
   depthTest: boolean
+  /** Fraction of the page's scroll the layer moves by. */
+  parallax: number
 }) {
   const { width, height } = useThree((state) => state.viewport)
   const dpr = useThree((state) => state.viewport.dpr)
   const colorScheme = useStore((state) => state.colorScheme)
+  const scroll = useScroll()
 
   const geometry = useMemo(() => {
     const positions = new Float32Array(count * 3)
@@ -136,7 +155,7 @@ function Swarm({
     for (let i = 0; i < count; i++) {
       // Spread a little past the viewport's edges so bugs drift in and out.
       positions[i * 3] = (Math.random() - 0.5) * width * 1.2
-      positions[i * 3 + 1] = (Math.random() - 0.5) * height * 1.1
+      positions[i * 3 + 1] = (Math.random() - 0.5) * height * SPREAD_Y
       positions[i * 3 + 2] = depth[0] + Math.random() * (depth[1] - depth[0])
       for (let j = 0; j < 4; j++) seeds[i * 4 + j] = Math.random()
     }
@@ -163,9 +182,12 @@ function Swarm({
           uOpacity: { value: 1 },
           uScatter: { value: 0 },
           uExtent: { value: 1 },
+          uScroll: { value: 0 },
+          uParallax: { value: parallax },
+          uSpreadY: { value: 1 },
         },
       }),
-    [depthTest]
+    [depthTest, parallax]
   )
 
   useEffect(() => {
@@ -191,16 +213,29 @@ function Swarm({
 
   useEffect(() => {
     material.uniforms.uExtent.value = Math.max(width, height)
+    material.uniforms.uSpreadY.value = height * SPREAD_Y
   }, [width, height, material])
 
   useFrame((state, delta) => {
     material.uniforms.uTime.value = state.clock.elapsedTime
     // Eased toward 1 while a dream's video is playing, back to 0 (the bugs
     // drift home) when it pauses or the player closes.
-    const { dream, videoPlaying } = useStore.getState()
-    const target = dream && videoPlaying ? 1 : 0
+    // Heading back (resetting) counts as stopped straight away, and the
+    // return is much quicker than the exit, so the swarm is home before
+    // the polaroids slide back up.
+    const { dream, videoPlaying, resetting } = useStore.getState()
+    const target = dream && videoPlaying && !resetting ? 1 : 0
     const scatter = material.uniforms.uScatter
-    scatter.value = MathUtils.damp(scatter.value, target, SCATTER_RATE, delta)
+    scatter.value = MathUtils.damp(
+      scatter.value,
+      target,
+      target > scatter.value ? SCATTER_RATE_OUT : SCATTER_RATE_BACK,
+      delta
+    )
+    // How far the page content has scrolled, in world units (drei's
+    // <Scroll> moves it by viewport height * (pages - 1) * offset).
+    material.uniforms.uScroll.value =
+      height * (scroll.pages - 1) * scroll.offset
   })
 
   return (
@@ -234,12 +269,14 @@ function Fireflies() {
         depth={[-0.9, 0.3]}
         renderOrder={BACK_RENDER_ORDER}
         depthTest
+        parallax={0.35}
       />
       <Swarm
         count={FRONT_COUNT}
         depth={[0.6, 1.1]}
         renderOrder={FRONT_RENDER_ORDER}
         depthTest={false}
+        parallax={0.8}
       />
     </>
   )

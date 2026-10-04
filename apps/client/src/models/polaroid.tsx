@@ -47,6 +47,7 @@ type GLTFResult = GLTF & {
 
 const FRAME_LIGHT = '#ffffff'
 const FRAME_DARK = '#2b2826'
+const FRAME_DARK_ROUGHNESS = 0.75
 
 // Carousel cards are drawn as layers, one at a time, each into its own
 // cleared depth buffer (see slider.tsx). That only works if every part of
@@ -61,6 +62,11 @@ function layeredCopy(material: MeshStandardMaterial) {
   if (!copy) {
     copy = material.clone()
     copy.transparent = true
+    // Out of the renderer's ACES tone mapping, which pulls white paper down
+    // to a muted, slightly olive grey — the carousel's lit frames should
+    // read as white (see the choose-screen light levels in scene.tsx).
+    copy.toneMapped = false
+    copy.userData.roughness = material.roughness
     layeredCopies.set(material, copy)
   }
 
@@ -109,7 +115,14 @@ const Polaroid = forwardRef<
       materials.initialShadingGroup,
     ]) {
       material.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
-      layeredCopies.get(material)?.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
+      const copy = layeredCopies.get(material)
+      if (copy) {
+        copy.color.set(dark ? FRAME_DARK : FRAME_LIGHT)
+        // Matte in dark mode: the glossy paper's specular highlight, from
+        // a light right by the camera, read as a bright white smear on the
+        // charcoal cards under the pointer.
+        copy.roughness = dark ? FRAME_DARK_ROUGHNESS : copy.userData.roughness
+      }
     }
   }, [dark, materials, layered])
 
@@ -135,7 +148,7 @@ const Polaroid = forwardRef<
           // the light value. Not on the player's polaroid, where it has no
           // card behind to land on and just reads as a dark smudge on the
           // background.
-          opacity={dark && layered ? 0.8 : 0.28}
+          opacity={dark ? (layered ? 0.8 : 0.28) : 0.16}
           depthWrite={false}
         />
       </mesh>

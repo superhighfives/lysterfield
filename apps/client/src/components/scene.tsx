@@ -26,9 +26,15 @@ import Fireflies from "./fireflies";
 // Half-angle of the choose screen's pointer-following light cone. With a
 // full penumbra, brightness falls off smoothly from the centre to this edge.
 const SPOT_ANGLE_CHOOSING = 0.85;
-// Choose-screen light balance: more ambient fill, a gentler spot pool.
-const AMBIENT_CHOOSING = 1.1;
-const SPOT_INTENSITY_CHOOSING = 2.5;
+// Choose-screen light balance, per colour scheme. three.js's ambient light
+// delivers intensity / PI to a white surface, so it takes ~PI to light the
+// (untone-mapped, see polaroid.tsx) carousel frames to near-white; the spot
+// pool on top then clips the highlighted cards to full white. Dark mode's
+// charcoal frames need far less spot, or the pool reads as a glare.
+const CHOOSING_LIGHT = {
+	light: { ambient: 2.6, spot: 2.5 },
+	dark: { ambient: 2.6, spot: 0.6 },
+};
 
 function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const camera = useRef<PerspectiveCameraType>(null);
@@ -111,15 +117,16 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 		// right). On the choose screen the ambient fill comes up and the
 		// spot comes down, so the pool still reads but the falloff is
 		// gentle. The player keeps the original balance.
+		const levels = CHOOSING_LIGHT[useStore.getState().colorScheme];
 		spotlight.intensity = MathUtils.lerp(
 			spotlight.intensity,
-			choosing ? SPOT_INTENSITY_CHOOSING : 5,
+			choosing ? levels.spot : 5,
 			0.08,
 		);
 		if (ambient.current) {
 			ambient.current.intensity = MathUtils.lerp(
 				ambient.current.intensity,
-				choosing ? AMBIENT_CHOOSING : 0.5,
+				choosing ? levels.ambient : 0.5,
 				0.08,
 			);
 		}
@@ -222,9 +229,10 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 				<primitive object={spotlight.target} />
 			</group>
 
-			<Fireflies />
-
 			<ScrollControls pages={2.7} damping={0.1}>
+				{/* Inside ScrollControls (for its scroll offset) but outside
+				    <Scroll>, so the swarm isn't carried with the content. */}
+				<Fireflies />
 				<Scroll>
 					<Choose position={[0, 0, 0]} />
 					<Main video={video} position={[0, -h * 1.6, 0]} tilt={rotation} />

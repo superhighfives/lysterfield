@@ -48,7 +48,7 @@ const invertInk = (shader: { fragmentShader: string }) => {
 // making the cards bigger on screen without changing their spacing or
 // fan. Applied to the group around Slider, like the scale below, so
 // drei's <Center> inside it is unaffected.
-const CAROUSEL_FORWARD = 0.15
+const CAROUSEL_FORWARD = 0.25
 
 const CAROUSEL_REFERENCE_HEIGHT = 900
 const CAROUSEL_MIN_SCALE = 0.6

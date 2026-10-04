@@ -47,6 +47,12 @@ const TILT_STAGGER_CARDS = 5
 const FLOAT_DRIFT_X = 0.035
 const FLOAT_DRIFT_Y = 0.03
 const FLOAT_BOB = 0.008
+// Turning toward the pointer: the angle to it is taken as if it hovered
+// TURN_DISTANCE (world units) in front of the row, then scaled by
+// TURN_AMOUNT (and each card's 0.6-1.4x reach), capped at TURN_MAX radians.
+const TURN_DISTANCE = 1
+const TURN_AMOUNT = 0.5
+const TURN_MAX = 0.4
 
 export default function Slider({
   items,
@@ -227,14 +233,19 @@ export default function Slider({
   // Each card also floats on its own, inside the spring-driven group, so
   // the row reads as separate cards drifting rather than one rigid object
   // pivoting with the camera's parallax:
-  // - it tilts and drifts (x/y) toward the pointer, by its own amount,
-  //   easing at a rate that falls off with distance from the centre — the
-  //   front cards answer first and the rest follow in a ripple;
+  // - it turns to face the pointer — cards left of it turn right, cards
+  //   right of it turn left — and drifts (x/y) toward it, by its own
+  //   amount, easing at a rate that falls off with distance from the
+  //   centre, so the front cards answer first and the rest follow;
   // - and it bobs gently on its own, at its own speed and phase, so the
   //   cards keep moving independently even with the pointer still.
   const tiltRefs = useRef<Record<number, Object3D | null>>({})
+  const cardWorld = useRef(new Vector3()).current
   useFrame((state) => {
     const { x: pointerX, y: pointerY } = state.pointer
+    // The pointer, projected onto the z=0 plane the camera frames.
+    const targetX = (pointerX * state.viewport.width) / 2 + state.camera.position.x
+    const targetY = (pointerY * state.viewport.height) / 2 + state.camera.position.y
     const time = state.clock.elapsedTime
     springs.forEach(({ position }, i) => {
       const tilt = tiltRefs.current[i]
@@ -259,8 +270,22 @@ export default function Slider({
         Math.sin(time * bobSpeed + bobPhase) * FLOAT_BOB
       const driftZ = Math.cos(time * bobSpeed * 0.7 + bobPhase) * FLOAT_BOB
 
-      tilt.rotation.x = MathUtils.lerp(tilt.rotation.x, -pointerY * 0.12 * reach, ease)
-      tilt.rotation.y = MathUtils.lerp(tilt.rotation.y, pointerX * 0.18 * reach, ease)
+      // Angle from this card to the pointer, as if the pointer sat
+      // TURN_DISTANCE in front of the row, scaled down and clamped so the
+      // cards turn toward it rather than snapping to face it.
+      tilt.getWorldPosition(cardWorld)
+      const turnY = MathUtils.clamp(
+        Math.atan2(targetX - cardWorld.x, TURN_DISTANCE) * TURN_AMOUNT * reach,
+        -TURN_MAX,
+        TURN_MAX
+      )
+      const turnX = MathUtils.clamp(
+        -Math.atan2(targetY - cardWorld.y, TURN_DISTANCE) * TURN_AMOUNT * reach,
+        -TURN_MAX,
+        TURN_MAX
+      )
+      tilt.rotation.x = MathUtils.lerp(tilt.rotation.x, turnX, ease)
+      tilt.rotation.y = MathUtils.lerp(tilt.rotation.y, turnY, ease)
       tilt.position.x = MathUtils.lerp(tilt.position.x, driftX, ease)
       tilt.position.y = MathUtils.lerp(tilt.position.y, driftY, ease)
       tilt.position.z = MathUtils.lerp(tilt.position.z, driftZ, ease)

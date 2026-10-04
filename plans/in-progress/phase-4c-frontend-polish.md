@@ -2,7 +2,7 @@
 title: "Phase 4c: front-end polish — dark mode, depth shader, playback reliability, browser navigation"
 status: In Progress
 created: 2026-09-30
-updated: 2026-10-02
+updated: 2026-10-04
 ---
 
 # Phase 4c: front-end polish — dark mode, depth shader, playback reliability, browser navigation
@@ -545,6 +545,37 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
     install/deploy from a checkout that still has those folders. Moving
     them into `dreams/archive/` (which the generator skips) stops that,
     without deleting the generated output.
+
+- **Review round: lighting, card turning, gnat motion.**
+  - *Grey/olive light-mode frames.* Two causes. The renderer's ACES tone
+    mapping pulls white paper down to a muted olive grey. And three.js's
+    ambient light delivers intensity ÷ π to a white surface, so 1.1 only
+    lit frames to ~35%. The carousel's frame copies now set
+    `toneMapped = false`, and the choose-screen light is per scheme
+    (`CHOOSING_LIGHT` in `scene.tsx`):
+    - light: ambient 2.6, spot 2.5. Near-white paper, with the pointer's
+      pool clipping to full white.
+    - dark: ambient 2.6, spot 0.6.
+  - *Too-bright dark-mode cards.* This was specular glare from a light
+    right by the camera on glossy charcoal (the overlay texture is fully
+    transparent, so it wasn't that). It's fixed by the lower dark spot
+    and by matte frame copies in dark mode (roughness 0.75).
+  - *Muddy light-mode shadows.* Drop-shadow opacity went 0.28 → 0.16.
+  - *Cards turn toward the cursor.* Each card's inner group rotates by
+    the angle from its world position to the pointer's point on the z=0
+    plane, as if the pointer hovered 1 unit in front. That angle is
+    scaled 0.5× (and by the card's reach) and capped at 0.4 rad. It
+    replaces the uniform tilt; the staggered easing stays.
+  - *Bigger cards.* `CAROUSEL_FORWARD` went 0.15 → 0.25.
+  - *Gnats.* They come back quickly: "resetting" counts as stopped at
+    once, and the return damps at 5 against 0.8 out, so they're back
+    before the polaroids slide up. They also have scroll parallax: the
+    swarm sits inside `ScrollControls` (for its offset) but outside
+    `<Scroll>`, moving by 0.35× (back) and 0.8× (front) of the content's
+    scroll, and wrapping in a band 1.3× the viewport's height.
+  - The two example dreams' generated folders in the main checkout were
+    moved to `apps/client/dreams/archive/`, so `generate-dreams.js` no
+    longer re-adds them.
 
 ## Open follow-ups (review round)
 
