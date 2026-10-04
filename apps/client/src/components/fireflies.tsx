@@ -5,6 +5,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   Color,
+  MathUtils,
   NormalBlending,
   ShaderMaterial,
 } from 'three'
@@ -25,8 +26,13 @@ import { useStore } from '../store'
 // before their own, so each layer's order goes on a wrapping group.
 //
 // Fixed in view (rendered outside the scroll container), so the swarm stays
-// with the viewer while the page scrolls underneath it. Skipped entirely for
+// with the viewer while the page scrolls underneath it. While a video plays
+// the bugs fly off out of frame, and drift back when it stops. Skipped entirely for
 // people who've asked for reduced motion.
+
+// How quickly the swarm clears out when a video starts (and drifts back
+// when it stops), as a MathUtils.damp rate — roughly a few seconds.
+const SCATTER_RATE = 0.8
 
 const BACK_COUNT = 70
 const FRONT_COUNT = 12
@@ -40,6 +46,8 @@ const vertexShader = /* glsl */ `
   uniform float uTime;
   uniform float uSize;
   uniform float uPixelRatio;
+  uniform float uScatter;
+  uniform float uExtent;
   varying float vFlicker;
 
   void main() {
@@ -58,7 +66,14 @@ const vertexShader = /* glsl */ `
       0.0
     ) * 0.006;
 
-    vec4 mvPosition = modelViewMatrix * vec4(position + wander + dart, 1.0);
+    // While a video plays, each bug flies off radially from the centre of
+    // the frame, staggered so they don't leave as one ring, accelerating
+    // as they go (squared), far enough to clear the frame from anywhere.
+    vec2 away = normalize(position.xy + vec2(0.0001, 0.0001));
+    float leave = smoothstep(0.0, 1.0, clamp(uScatter * 1.6 - s.z * 0.6, 0.0, 1.0));
+    vec3 scatter = vec3(away * leave * leave * uExtent * (1.0 + s.y), 0.0);
+
+    vec4 mvPosition = modelViewMatrix * vec4(position + wander + dart + scatter, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     gl_PointSize = uSize * uPixelRatio * (1.0 / -mvPosition.z) * (0.6 + s.x * 0.8);
 
@@ -146,6 +161,8 @@ function Swarm({
           uPixelRatio: { value: 1 },
           uColor: { value: new Color() },
           uOpacity: { value: 1 },
+          uScatter: { value: 0 },
+          uExtent: { value: 1 },
         },
       }),
     [depthTest]
@@ -172,8 +189,18 @@ function Swarm({
     [geometry, material]
   )
 
-  useFrame((state) => {
+  useEffect(() => {
+    material.uniforms.uExtent.value = Math.max(width, height)
+  }, [width, height, material])
+
+  useFrame((state, delta) => {
     material.uniforms.uTime.value = state.clock.elapsedTime
+    // Eased toward 1 while a dream's video is playing, back to 0 (the bugs
+    // drift home) when it pauses or the player closes.
+    const { dream, videoPlaying } = useStore.getState()
+    const target = dream && videoPlaying ? 1 : 0
+    const scatter = material.uniforms.uScatter
+    scatter.value = MathUtils.damp(scatter.value, target, SCATTER_RATE, delta)
   })
 
   return (

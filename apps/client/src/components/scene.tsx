@@ -8,6 +8,7 @@ import {
 import { useFrame, useThree } from "@react-three/fiber";
 import { RefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
+	AmbientLight,
 	MathUtils,
 	Mesh,
 	Vector3,
@@ -25,6 +26,9 @@ import Fireflies from "./fireflies";
 // Half-angle of the choose screen's pointer-following light cone. With a
 // full penumbra, brightness falls off smoothly from the centre to this edge.
 const SPOT_ANGLE_CHOOSING = 0.85;
+// Choose-screen light balance: more ambient fill, a gentler spot pool.
+const AMBIENT_CHOOSING = 1.1;
+const SPOT_INTENSITY_CHOOSING = 2.5;
 
 function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const camera = useRef<PerspectiveCameraType>(null);
@@ -49,6 +53,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	// per-frame pointer value into local state purely so the dot mesh below
 	// could read it reactively; it's set directly on the mesh ref instead now.
 	const dotMesh = useRef<Mesh>(null);
+	const ambient = useRef<AmbientLight>(null);
 	const dotMaterial = useRef<MeshStandardMaterial>(null);
 
 	const setInitialRotation = useStore((state) => state.setInitialRotation);
@@ -101,6 +106,23 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 			0.08,
 		);
 		spotlight.penumbra = MathUtils.lerp(spotlight.penumbra, choosing ? 1 : 0, 0.08);
+		// Cards outside the pool used to drop to ambient-only, which read as
+		// far too dark (the left half of the row with the pointer hard
+		// right). On the choose screen the ambient fill comes up and the
+		// spot comes down, so the pool still reads but the falloff is
+		// gentle. The player keeps the original balance.
+		spotlight.intensity = MathUtils.lerp(
+			spotlight.intensity,
+			choosing ? SPOT_INTENSITY_CHOOSING : 5,
+			0.08,
+		);
+		if (ambient.current) {
+			ambient.current.intensity = MathUtils.lerp(
+				ambient.current.intensity,
+				choosing ? AMBIENT_CHOOSING : 0.5,
+				0.08,
+			);
+		}
 
 		const pointer = useStore.getState().globalPointer;
 		if (dotMesh.current) {
@@ -154,6 +176,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 	const spotlight = useMemo(() => {
 		const light = new SpotLight("#fff");
 		light.position.set(5, 0, 30);
+		light.intensity = 5;
 		return light;
 	}, []);
 	const spotTarget = useMemo(() => new Vector3(), []);
@@ -177,7 +200,7 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
 			{!isMobile && !isTouch ? (
 				<OrbitControls enableRotate={false} enableZoom={false} />
 			) : null}
-			<ambientLight intensity={0.5} />
+			<ambientLight ref={ambient} intensity={0.5} />
 			<group>
 				{/* decay={0} — three.js dropped the legacy (non-physically-correct)
             lighting mode this session's three/fiber bump pulled in, so this
@@ -190,7 +213,6 @@ function Scene({ video }: { video: RefObject<HTMLVideoElement | null> }) {
             that to bring the frames back up to a proper bright white. */}
 				<primitive
 					object={spotlight}
-					intensity={5}
 					decay={0}
 					castShadow
 					shadow-bias={-0.01}

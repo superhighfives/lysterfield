@@ -524,6 +524,28 @@ together (3 before 4) and flags the one real dependency (2 needs 1):
     rule above.
   - Skipped entirely under `prefers-reduced-motion`.
 
+- **Review round: scatter, light balance, shadows, example dreams.**
+  - Gnats scatter while a video plays. A `uScatter` uniform, damped
+    toward 1 while a dream's video is playing, pushes each bug radially
+    off-frame. It's staggered per bug and accelerates as they go. They
+    drift back when playback pauses or stops.
+  - The choose screen's light balance changed. Ambient goes 0.5 → 1.1
+    and the spot 5 → 2.5, both eased, so cards outside the pointer's pool
+    are light grey instead of dark. The player keeps 0.5 / 5.
+  - Carousel cards no longer cast or receive shadow-map shadows
+    (`castShadow`/`receiveShadow` off when `layered`). With the light
+    aimed sideways from the camera, those came out low-res and jagged.
+    They don't belong between layered cards anyway, and the drop-shadow
+    plane does the job.
+  - Removed the two 15-second example entries: `dream-v1` and
+    `dream-styletransfer-v2-fixed`. That covers their `dreams.json`
+    entries and their committed `public/assets/<id>/` hero and loop
+    files. `scripts/generate-dreams.js` rebuilds `dreams.json` from the
+    local `dreams/` folders, so they'll come back on the next
+    install/deploy from a checkout that still has those folders. Moving
+    them into `dreams/archive/` (which the generator skips) stops that,
+    without deleting the generated output.
+
 ## Open follow-ups (review round)
 
 - **Glossy charcoal frames.** In dark mode, the player's polaroid (and

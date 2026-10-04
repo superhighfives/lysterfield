@@ -80,7 +80,12 @@ const Polaroid = forwardRef<
   ThreeElements['group'] & {
     passthroughMaterial: JSX.Element
     intersectRef?: RefObject<Mesh>
-    /** Carousel card: use the transparent material copies (see above). */
+    /** Carousel card: use the transparent material copies (see above),
+     *  and stay out of the spotlight's shadow map. Cards are drawn as
+     *  separate layers, so shadow-map shadows between them don't belong,
+     *  and with the choose screen's light aimed sideways from the camera
+     *  they came out low-res and jagged. The drop-shadow plane does that
+     *  job instead. */
     layered?: boolean
   }
 >(({ layered, passthroughMaterial, intersectRef, ...props }, ref) => {
@@ -137,8 +142,8 @@ const Polaroid = forwardRef<
 
       {/* Overlay */}
       <mesh
-        castShadow
-        receiveShadow
+        castShadow={!layered}
+        receiveShadow={!layered}
         geometry={nodes.Object_3001.geometry}
         material={materials['Material.001']}
         position={[0, 0, 0.001]}
@@ -147,8 +152,8 @@ const Polaroid = forwardRef<
       {/* Inside */}
       <mesh
         ref={intersectRef}
-        castShadow
-        receiveShadow
+        castShadow={!layered}
+        receiveShadow={!layered}
         geometry={nodes.Object_3.geometry}
         rotation={rotation as Euler}
         position={position as Vector3}
@@ -158,8 +163,8 @@ const Polaroid = forwardRef<
       </mesh>
       {/* Back */}
       <mesh
-        castShadow
-        receiveShadow
+        castShadow={!layered}
+        receiveShadow={!layered}
         geometry={nodes.Object_4.geometry}
         material={frame(materials.Framelambert79SG)}
         rotation={rotation as Euler}
@@ -168,8 +173,8 @@ const Polaroid = forwardRef<
       />
       {/* Front */}
       <mesh
-        castShadow
-        receiveShadow
+        castShadow={!layered}
+        receiveShadow={!layered}
         geometry={nodes.Object_5.geometry}
         material={frame(materials.initialShadingGroup)}
         rotation={rotation as Euler}
