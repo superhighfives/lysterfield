@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
-import { exists, framesDir, listFrames, siblingFramePath, type Job } from '../job.ts'
+import { exists, framesDir, keyframeIndices, listFrames, siblingFramePath, type Job } from '../job.ts'
 import { detectLeaks, LEAK_SCORE_THRESHOLD, scoreLeak } from '../leak-detection.ts'
 import { reshapeMask } from '../mask.ts'
 
@@ -47,16 +47,23 @@ export interface BackgroundStabilizeResult {
  * off-by-one from a naive reading and caused a real repair mistake — see
  * the plan doc's "Repair — first attempt, wrong, corrected" section).
  *
+ * Outside the mask, each frame shows panel 2's own frame for that moment
+ * (`baseFramesDir`, the same frames `background-plate` filled from) — so
+ * fill is only ever needed at keyframes, and `background-plate` only
+ * generates it there. Earlier versions used each frame's own flux-fill-pro
+ * output as that base, which needed a paid fill for every frame.
+ *
  * Person-leak detection (`leak-detection.ts`) runs only against the
  * keyframes actually used — non-keyframe frames never surface in the
  * output no matter what they contain, so checking/repairing them would be
  * wasted work (an earlier manual pass did exactly that and had to be
  * reverted after the user caught the resulting stutter — see the plan
  * doc). A leaked keyframe is repaired by substituting the nearest clean
- * frame's fill content, found by searching outward in both directions.
+ * keyframe's fill content, found by searching outward in both directions.
  */
 export async function stabilizeBackground(
   job: Job,
+  baseFramesDir: string,
   fillFramesDir: string,
   alphaFramesDir: string,
   outputName: string,
@@ -70,17 +77,21 @@ export async function stabilizeBackground(
   const interval = job.fps / stepFps
 
   const outputDir = await framesDir(job, outputName)
-  const frames = await listFrames(fillFramesDir)
-  if (frames.length === 0) throw new Error(`No frames found in ${fillFramesDir}`)
+  const frames = await listFrames(baseFramesDir)
+  if (frames.length === 0) throw new Error(`No frames found in ${baseFramesDir}`)
 
-  const keyframeIndices: number[] = []
-  for (let i = 0; i < frames.length; i += interval) keyframeIndices.push(i)
+  const keyframes = keyframeIndices(frames.length, interval)
+  for (const i of keyframes) {
+    if (!(await exists(path.join(fillFramesDir, frames[i])))) {
+      throw new Error(`Missing fill for keyframe ${frames[i]} in ${fillFramesDir} — run background-plate (same --step-fps) first`)
+    }
+  }
 
   const tmpDir = await mkdtemp(path.join(tmpdir(), 'lysterfield-background-stabilize-'))
   try {
     // --- Leak detection + repair, keyframes only ---
     const keyframeCandidates = await Promise.all(
-      keyframeIndices.map(async (i) => ({
+      keyframes.map(async (i) => ({
         frame: frames[i],
         fillPath: path.join(fillFramesDir, frames[i]),
         alphaPath: await siblingFramePath(path.join(fillFramesDir, frames[i]), alphaFramesDir),
@@ -91,13 +102,14 @@ export async function stabilizeBackground(
     const repairs: { frame: string; replacedWith: string }[] = []
     const contentSource = new Map<number, string>() // keyframe index -> frame filename to actually use
 
-    for (const i of keyframeIndices) {
+    for (let k = 0; k < keyframes.length; k++) {
+      const i = keyframes[k]
       const frame = frames[i]
       if (!leakedFrames.has(frame)) {
         contentSource.set(i, frame)
         continue
       }
-      const replacement = await findCleanNeighbor(i, frames, fillFramesDir, alphaFramesDir, leakedFrames)
+      const replacement = await findCleanNeighbor(k, keyframes.map((j) => frames[j]), fillFramesDir, alphaFramesDir, leakedFrames)
       contentSource.set(i, replacement)
       repairs.push({ frame, replacedWith: replacement })
     }
@@ -105,8 +117,8 @@ export async function stabilizeBackground(
     // --- Build the motion-compensated mask sequence from keyframes only ---
     const keyframeMaskDir = path.join(tmpDir, 'keyframe-masks')
     await mkdir(keyframeMaskDir, { recursive: true })
-    for (let k = 0; k < keyframeIndices.length; k++) {
-      const i = keyframeIndices[k]
+    for (let k = 0; k < keyframes.length; k++) {
+      const i = keyframes[k]
       const alphaPath = await siblingFramePath(path.join(fillFramesDir, frames[i]), alphaFramesDir)
       await reshapeMask(alphaPath, path.join(keyframeMaskDir, `${String(k + 1).padStart(4, '0')}.png`))
     }
@@ -165,6 +177,10 @@ export async function stabilizeBackground(
       if (cached) return cached
       const buf = await sharp(path.join(fillFramesDir, frame)).resize(width, height).raw().toBuffer()
       fillCache.set(frame, buf)
+      // Workers walk frames roughly in order, so only the last few held
+      // fills are ever reused — bound the cache (a full-length song has
+      // ~1,300 keyframes at ~3MB each).
+      if (fillCache.size > 16) fillCache.delete(fillCache.keys().next().value!)
       return buf
     }
 
@@ -179,7 +195,7 @@ export async function stabilizeBackground(
         const keyframeIndex = Math.floor(i / interval) * interval
         const heldFrame = contentSource.get(keyframeIndex) ?? frames[keyframeIndex]
 
-        const baseRaw = await loadFillRaw(frame)
+        const baseRaw = await sharp(path.join(baseFramesDir, frame)).resize(width, height).removeAlpha().raw().toBuffer()
         const heldRaw = await loadFillRaw(heldFrame)
 
         const maskFrameName = mciMaskFrameNames[Math.min(i, mciMaskFrameNames.length - 1)]
@@ -188,6 +204,14 @@ export async function stabilizeBackground(
           .greyscale()
           .raw()
           .toBuffer()
+        // Floor the interpolated mask at this frame's own reshaped alpha:
+        // `minterpolate` lags fast motion (raised arms in the full-video
+        // pilot outran it mid-hold and showed through panel 2's base).
+        const ownMaskPath = path.join(tmpDir, `own-${frame}.png`)
+        await reshapeMask(await siblingFramePath(path.join(baseFramesDir, frame), alphaFramesDir), ownMaskPath)
+        const ownMaskRaw = await sharp(ownMaskPath).resize(width, height).greyscale().raw().toBuffer()
+        await rm(ownMaskPath)
+        for (let p = 0; p < maskRaw.length; p++) if (ownMaskRaw[p] > maskRaw[p]) maskRaw[p] = ownMaskRaw[p]
 
         const out = Buffer.alloc(width * height * channels)
         for (let p = 0; p < width * height; p++) {
@@ -210,10 +234,9 @@ export async function stabilizeBackground(
 }
 
 /**
- * Searches outward (alternating +1/-1) from `index` for the nearest frame
- * that isn't itself a leak. Candidates are re-scored individually (not just
- * checked against the keyframe-only leak set) since a repair target doesn't
- * have to be a keyframe, and non-keyframe frames were never scored earlier.
+ * Searches outward (alternating +1/-1) through `frames` — the keyframes,
+ * the only frames with fill — from `index` for the nearest one that isn't
+ * itself a known leak, re-scoring each candidate before trusting it.
  */
 async function findCleanNeighbor(
   index: number,

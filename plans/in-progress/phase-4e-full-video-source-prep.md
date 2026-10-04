@@ -1,189 +1,218 @@
 ---
-title: "Phase 4e: prep the full 165s source for a full-video pipeline run"
+title: "Phase 4e: full-song pipeline run (.jobs/full-video)"
 status: In Progress
 created: 2026-09-30
-updated: 2026-09-30
+updated: 2026-10-04
 ---
 
-# Phase 4e: prep the full 165s source for a full-video pipeline run
+# Phase 4e: full-song pipeline run (`.jobs/full-video`)
 
 ## Handoff note (read this first)
 
-This doc exists specifically so a fresh agent can pick up with no prior
-context after the user restarts their terminal app (needed for a macOS
-permission grant — see "Current blocker" below). Everything under
-"Done this session" already happened and doesn't need redoing. The very
-next action is under "Next step" — start there.
+"Where we're at" is the current state, and "Next steps" is what to do
+next. Everything below those is history and findings that explain why
+things are the way they are. None of it needs redoing.
 
 ## Goal
 
-Process the entire shared raw source clip (`main.mov`, 165s) through the
-full `apps/pipeline` chain into a new job at `.jobs/full-video`, reusing
-as much already-generated output as possible — both from
-`.jobs/real-15s-60fps` (the 15s test job) and, if feasible, from the
-**legacy pipeline's own full-video output already sitting on the external
-drive** — instead of paying to regenerate everything via Replicate.
+Run the **whole song** (214.8s, not the 165s `main.mov` this doc
+originally targeted, see Findings) through `apps/pipeline` into
+`.jobs/full-video`. Reuse the legacy pipeline's existing full-song
+per-frame output wherever it's good enough instead of paying Replicate to
+regenerate it.
 
-## Done this session (2026-09-30), don't redo
+## Where we're at (2026-10-04)
 
-1. **Matte (panel 4) artifact fixed.** RVM occasionally glitches for a
-   frame or two — confirmed as a uniform shrink of the *entire* silhouette
-   outline, not motion (visualized via a neighbor-majority diff on
-   `real-15s-60fps` frames 0225-0233 and 0251/0253). Fixed in
-   `apps/pipeline/src/steps/matte.ts`: `repairGlitchedFrames()` detects
-   frames whose mask disagrees sharply with a temporal-neighbor majority
-   vote and repairs them by holding the nearest clean neighbor (same
-   pattern as `background-stabilize.ts`'s existing leak repair). Applied
-   to `real-15s-60fps`: 9 frames repaired in place.
-2. **Depth (panel 5) artifact fixed.** ZoeDepth sometimes hallucinates
-   structure in the masked-out corners. Tested swapping to
-   `depth-anything-v2` first — rejected, it ignores alpha entirely and
-   paints a depth gradient across the *whole* frame, every frame, which is
-   worse. Instead, `depth.ts` now re-applies the alpha mask as a hard
-   cutout *after* gamma/rescale (`gammaRescaleAndMask()`), independent of
-   which depth model is used. Applied to `real-15s-60fps`: the 9
-   alpha-repaired frames were regenerated live (real ZoeDepth calls
-   against the corrected alpha), and the other 352 existing depth frames
-   were fixed locally with zero extra Replicate cost (the post-mask
-   commutes with the existing gamma LUT, so no re-call was needed). Both
-   known bad frames (0250, 0300) confirmed clean after the fix.
-3. **Outline (panel 6)** regenerated for the same 9 frames (depends on
-   alpha + depth, both of which changed for those indices).
-4. **`dream.ts` hardened**: a fixed `NO_PEOPLE_SUFFIX` is now always
-   appended to every take's prompt — `real-15s-60fps`'s two dream takes
-   (`dream-styletransfer-v2`, `dream-styletransfer-v2-fixed`) both showed
-   a recognisable person, which the per-take prompt alone didn't
-   prevent. Also documented in `CLAUDE.md`.
-5. **Discovered panel 3 (background) can't be cheaply patched.**
-   `real-15s-60fps`'s intermediate per-frame fill (`3-background/plate`)
-   no longer exists on disk at all — only the final `3-background/stable`
-   output does. Fixing it (for the 9 repaired-alpha frames, or at all)
-   needs a full 361-frame `background-plate` re-run (real `flux-fill-pro`
-   cost), not a surgical patch. **Not done — left for a future decision.**
-6. Filed `plans/backlog/frame-preview-approval-tool.md` — a cheap
-   5-frame-at-a-time preview/approval idea for dream art direction, so a
-   future full-length dream run doesn't repeat `real-15s-60fps`'s two
-   failed full-cost attempts.
+| Panel | State | Cost |
+| --- | --- | --- |
+| 1 words | `compose` copies the shared `words.mov` as for every job | $0 |
+| 2 portrait (`2-portrait/raw`, `upscaled`) | Reused from legacy (`images`, `resized`), 5,156 frames | $0 |
+| 3 background | **Keyframe fill run in progress** (`3-background/plate`), then `background-stabilize` | ~1,290 flux-fill-pro calls + pilots |
+| 4 matte (`alpha`) | Reused from legacy, original 2160px PNGs, **no glitch repair** (see below) | $0 |
+| 5 depth | Reused from legacy, post-masked with alpha | $0 |
+| 6 outline | Reused from legacy (`sketch`) | $0 |
+| 7 dream | Not started. Needs an art-direction pick first | — |
 
-## Current blocker
+- Job: `.jobs/full-video` (shared across worktrees via the `.jobs`
+  symlink), initialised from
+  `/Volumes/HDD/lysterfield-lake-pipeline/video-final/output/main-compiled-full.mov`
+  at 24fps, giving **5,156 frames**.
+- Legacy population is done by the one-off `.jobs/full-video/populate-legacy.ts`
+  using `.jobs/full-video/legacy-frame-map.json` (new 0-based index ->
+  legacy 0-based index). Both are generated-job files, not committed.
+- **Panel 3 run:** started 2026-10-04, 1,290 keyframes total (every 4th
+  frame, `stepFps` 6). It was at ~100/1,290 when this was written; check
+  `ls .jobs/full-video/3-background/plate | wc -l`. The step stops on the
+  first Replicate-side failure (no automatic retries); rerun the same
+  command once and it skips finished frames:
 
-**The external drive (`/Volumes/HDD`) is mounted but not readable from
-this session** — `ls`/`stat` on `/Volumes/HDD/lysterfield-lake-pipeline`
-returns `Permission denied (code 13)` even with the Bash tool's sandbox
-disabled, and the directory shows `drwx------` ownership. This is a macOS
-Files-and-Folders / Full Disk Access privacy permission, not something
-fixable from inside a session. **The user is restarting their terminal
-app so a just-granted permission takes effect** — that's the trigger for
-writing this handoff doc. Once restarted, access should work; if it
-still doesn't, the permission may have been granted to the wrong app (the
-one actually hosting the Claude Code session, not e.g. a different
-terminal), or needs re-granting post-restart.
+  ```
+  bun run --cwd apps/pipeline cli background-plate --job .jobs/full-video
+  ```
 
-## Next step (do this first after restart)
+- **Replicate spend so far on this job:** 126 flux-fill-pro calls across
+  the two pilots (including 4 regenerations: 1 Replicate-side failure in v1,
+  2 leak-check regenerations in v2, 1 boundary keyframe redone), plus the
+  in-progress full run.
+- `flux-fill-pro`'s per-call price is still **unconfirmed**. The user is
+  checking the Replicate dashboard. It's believed to be ~$0.05/image, so
+  the full panel 3 run would be roughly $65.
 
-Re-check access:
+## Next steps
 
-```
-ls -la "/Volumes/HDD/lysterfield-lake-pipeline/"
-```
+1. Let the panel 3 keyframe run finish (re-run once on a Replicate-side
+   failure).
+2. **Visual review of every keyframe fill** on contact sheets (48 per
+   sheet, ~27 sheets), as the user asked. The automatic check only catches
+   person leaks, so review for defined objects (roads, buildings, poles,
+   water), text/signatures and anything off-palette. To regenerate a bad
+   fill, move it to `3-background/plate-rejected/<frame>.<n>.jpg` and rerun
+   `background-plate`. The seed bumps by the number of prior rejections, so
+   the redo is a genuinely different fill.
+3. Run `background-stabilize --job .jobs/full-video` (free, local) and
+   watch the result in motion, especially fast-motion stretches like
+   2011-2040 and the hard cut at ~157s (new frame ~3768).
+4. Pick a dream (panel 7) direction before running it at this scale. See
+   `plans/backlog/frame-preview-approval-tool.md` and don't repeat
+   `real-15s-60fps`'s two failed full-cost takes. Dream needs explicit
+   cost sign-off (~1,290 calls at $0.03 ≈ $39).
+5. `compose` + publish.
 
-If that works, immediately look for the legacy pipeline's full-video
-**per-frame output** (not just the raw source) — per
-`plans/backlog/rebuild-pipeline-as-replicate-cli.md`'s Phase 0 ground-truth
-notes, a complete run's output tree lives under
-`video-final/output/` on the drive, including `output/alpha/*.png`
-(Robust Video Matting — same model the new pipeline uses),
-`output/depth/*.png` or similar (ZoeDepth — same model), and watercolor
-"artwork"/avatar frames from DiffusionCLIP (same checkpoint/params the
-new pipeline's `portrait.ts` uses — see its comment: "Landed back on
-DiffusionCLIP itself... same real style"). **The user's idea (this
-session, pending investigation): if these are the same models with the
-same params, the legacy frames might be directly reusable for
-`.jobs/full-video`'s alpha/depth/portrait panels, which would eliminate
-most of the per-frame Replicate cost in the table below.**
+## Panel 3 pipeline changes (2026-10-04)
 
-What to check before trusting that idea:
-- **Resolution/crop**: does the legacy output match the new pipeline's
-  1280px-capped square crop (`init.ts`), or is it full-res/different
-  aspect ratio and in need of re-cropping?
-- **Frame rate**: legacy folder names suggest up to 60fps; the new
-  pipeline defaults to 24fps (cost-driven, see `init.ts`'s docstring).
-  Reusing legacy frames likely means picking every Nth legacy frame to
-  match 24fps, not a 1:1 copy.
-- **Frame numbering/offset**: legacy frames need to align to whatever
-  offset/length the new `full-video` job actually extracts.
-- **Visual parity**: `plans/done/phase-5-end-to-end-parity-check.md`
-  already found depth panel output is only an approximate match between
-  old and new ("same general concept... slightly lower contrast") — not
-  byte-identical even with the "same" model, likely due to the new
-  pipeline's different pre/post-processing around the raw call. Spot-check
-  a few frames before committing to wholesale reuse.
+Motivated by the full-video pilots. All in `apps/pipeline/src`:
 
-## Other open blockers (independent of the drive)
+- **Keyframe-only fills.** `background-plate` now fills only the
+  `stepFps` keyframes (shared `keyframeIndices()` in `job.ts`, so plate and
+  stabilize can't drift apart). `background-stabilize` takes panel 2
+  (`2-portrait/upscaled`, CLI `--base`) as the base layer outside the mask,
+  instead of each frame's own fill. Measured flux-fill-pro drift from its
+  input outside the mask: 1.4/255 mean, so this is visually equivalent at
+  ~1/4 the calls. (An earlier note here said a keyframe-only plate would
+  be "identical"; it isn't byte-identical, because stabilize used every
+  frame's fill as the base layer, but it's equivalent in practice.)
+- **Bigger mask, covering the whole hold.** The user flagged stylized arms
+  showing through panel 3 on fast moves (pilot frames 2023-2028).
+  DiffusionCLIP's painterly arms smear past the true silhouette, and the
+  mci-interpolated mask lags fast motion mid-hold. Fixes:
+  - `reshapeMask` unions several alphas at a fixed 1024px working size and
+    applies 96px dilation then blur sigma 24. The old values (100
+    ffmpeg dilation passes, sigma 30, at the alpha's native 2160px) worked
+    out to ~47px/sigma 14. The dilation is a hand-rolled separable max
+    filter, because sharp 0.35's `dilate`/`erode` didn't behave as a plain
+    max filter on these masks (the silhouette's top edge moved the wrong
+    way, inconsistently).
+  - `background-plate`'s mask for each keyframe is the union over its
+    hold window plus the next keyframe.
+  - `background-stabilize` floors each frame's interpolated mask at that
+    frame's own reshaped alpha.
+- **Tighter `FILL_PROMPT`.** Pilot v1 invented a paved road with lane
+  markings, a red barn, a wind turbine, a power pole, a water channel and
+  one signature-like scribble. The prompt now leads with "only open
+  grassland, sky and the existing wooden boardwalk" and names exclusions.
+- **Per-fill leak check with one capped regeneration.** Each fill is
+  scored with the existing local `scoreLeak` as it lands. On failure the
+  original goes to `3-background/plate-rejected/` and the frame is
+  regenerated **once** with seed + 1. A second failure is kept and logged
+  for stabilize's own leak repair. This was explicitly requested by the
+  user and is bounded at one extra call per frame, a deliberate exception
+  to the CLAUDE.md no-retry rule. Known weakness: boardwalk planks and
+  orange flowers read as skin, so both pilot-v2 rejections were false
+  positives. At that rate expect ~40 wasted calls over the full song.
+- **Result (pilot v2, 62 calls on frames 2001-2240):** no arm leaks, no
+  invented objects, a consistent boardwalk through grassland. When the
+  arms go wide the mask covers most of the frame and the fill becomes
+  soft haze; one frame (2025) shows a faint horizontal haze edge. Clips:
+  `.jobs/full-video/pilot/panel3-pilot.mp4` (v1) and `panel3-pilot-v2.mp4`
+  (v2), panel 2 left and panel 3 right.
 
-- **Unknown offset for `real-15s-60fps`** within the 165s source — needed
-  to know which of its frames correspond to which part of the full video,
-  for reuse. Resolve by frame-matching `real-15s-60fps/source/0001.jpg`
-  against the full source once accessible.
-- **`flux-fill-pro`'s real per-call rate is still unconfirmed.** Every
-  other model's cost below is a confirmed dashboard figure; this one
-  isn't (phase-5's cost pass predates the current background-plate
-  architecture).
+## Other fixes (2026-10-04)
 
-## Rough cost shape (pending the above — likely to shrink a lot if legacy reuse works)
+- **`init.ts` crop.** It capped the *crop* at 1280px, so any source larger
+  than 1280 got a zoomed-in center crop instead of a full-frame downscale.
+  It now crops the full centered square, then scales to 1280.
+- **`repairGlitchedFrames` is not safe at full length.** On the full song it
+  flagged 80 frames. The cluster checked (2011-2040) was all fast real arm
+  motion with correct masks, and "repairing" it would have frozen the arms.
+  All 80 were restored to the legacy originals and their depth regenerated.
+  The detector needs tuning (or a flagged-frame review list) before it's
+  trusted on long footage. There may still be real glitches among those 80;
+  nobody has reviewed them individually.
 
-At 24fps, 165s ≈ 3,960 frames (~11x `real-15s-60fps`). Every step runs
-per-frame except `dream` (every 4th frame, `stepFps: 6`) and `matte` (one
-whole-video call):
+## Findings (2026-09-30 / 10-02, legacy drive)
 
-| Step | Calls (full video) | $/call | Rough total |
-| --- | --- | --- | --- |
-| portrait (`diffusionclip`) | ~3,960 | $0.02 (confirmed) | ~$79 — **could drop to ~$0 if legacy artwork frames are reusable** |
-| background-plate (`flux-fill-pro`) | ~3,960 | **unconfirmed** | **unknown** |
-| depth (`zoedepth`) | ~3,960 | <$0.01 | ~$20-40 — **could drop to ~$0 if legacy depth frames are reusable** |
-| outline (custom CPU model) | ~3,960 | <$0.01 | ~$20-40 |
-| upscale (`real-esrgan`) | ~3,960 | <$0.01 | ~$20-40 |
-| dream (`flux-kontext-dev`) | ~990 | $0.03 (confirmed) | ~$30 |
-| matte (`robust_video_matting`) | 1 (whole video) | — | low — **could drop to ~$0 if legacy alpha frames are reusable** |
+The legacy run at
+`/Volumes/HDD/lysterfield-lake-pipeline/video-final/output/main/output/`
+holds a **complete per-frame set for the whole song**: `alpha` (2160px),
+`resized` (portrait, upscaled, 1024px; `images` is the 512px raw),
+`depth` (RGBA), `sketch` (outline), `words`, `background`/
+`resized-background`, `green`, at 12,887 frames each, 1-indexed `%04d.png`.
 
-Without legacy reuse: likely low-to-mid hundreds of dollars total. **Get
-explicit cost sign-off from the user before running any per-frame Replicate
-step, regardless of how the legacy-reuse investigation turns out.**
+- **The real full-length source is not `main.mov`.** The legacy frames run
+  at 60fps for 214.78s, matching `resources/audio/lysterfield-lake.wav`
+  (214.82s). `main.mov` (165s) is a partial edit. Frame-matching 32px
+  signatures against `main-cropped.mov`:
+  - legacy 0-429 (0-7.15s): **different intro**. It opens on an empty-field
+    pan before the subject walks in, where `main.mov` opens on a close-up.
+    They converge at 7.17s.
+  - legacy 430-9417 (7.17-156.95s): same footage as `main.mov`,
+    time-aligned (a `-r 60` resample of the 59.94fps source).
+  - **Hard cut at legacy frame 9418 (156.97s)**, confirmed by the user.
+    9418-12886 (~57.8s) is a second clip not in `main.mov`.
+- `output/main-compiled-full.mov` (2160px, 60fps, 12,887 frames, built
+  from the legacy source frames) is therefore the full-song source, aligned
+  with every legacy panel.
+- **Frame map (measured, not formula).** New 24fps frame k (0-based) lands
+  on legacy frame ≈ 2.5k − 3.5 (−3 or −4 vs `round(2.5k)`). That's
+  ffmpeg's `-r 24` frame selection, about 58ms behind naive rounding. The
+  match error is under 0.6, against ~8 between different encodes, and the
+  map is monotonic.
+- Spot-checked legacy alpha/portrait/depth/outline/words at legacy frames
+  4000 (pre-cut) and 11000 (post-cut): all production-quality.
+- Legacy depth already carries its own gamma, so only the alpha post-mask
+  from `depth.ts`'s `gammaRescaleAndMask()` was applied (gamma twice would
+  double it).
+- Panel 3 is deliberately **not** reused: the user wants the new
+  soft-stepped mcimask style (reference
+  `~/Desktop/panel3-soft-stepped-mcimask.mp4`).
 
-## Approach
+## Earlier session (2026-09-30), on `real-15s-60fps`
 
-1. Confirm drive access (see "Next step").
-2. Investigate legacy frame reuse for alpha/depth/portrait (resolution,
-   fps, offset, visual spot-check — see checklist above).
-3. Resolve `real-15s-60fps`'s offset within the full source.
-4. `init` a new `.jobs/full-video` job at a chosen fps/crop.
-5. Populate as many panels as possible from reuse (legacy drive frames
-   and/or `real-15s-60fps`'s overlapping window) before running anything
-   live.
-6. Get cost sign-off for whatever's left to actually generate.
-7. Run remaining steps only for frames not covered by reuse.
-8. Pick a dream (panel 7) direction before running panel 7 at this scale
-   — see `plans/backlog/frame-preview-approval-tool.md`; don't repeat
-   `real-15s-60fps`'s two failed full-cost takes.
+1. **Matte (panel 4) glitch repair** added to `matte.ts`
+   (`repairGlitchedFrames()`). 9 frames were repaired on the 15s job. See
+   the full-length caveat above.
+2. **Depth (panel 5) corner artifacts**: `depth.ts` re-applies the alpha
+   mask after gamma/rescale. `depth-anything-v2` was tested and rejected
+   (it ignores alpha).
+3. **Outline (panel 6)** regenerated for the same 9 frames.
+4. **`dream.ts`** always appends `NO_PEOPLE_SUFFIX` (also in CLAUDE.md).
+5. `real-15s-60fps`'s panel 3 can't be cheaply patched, because its
+   `3-background/plate` is gone. Fixing it needs a background-plate re-run.
+   Now ~91 keyframe calls with the keyframe-only change. Not done.
+6. Filed `plans/backlog/frame-preview-approval-tool.md`.
 
 ## Tasks
 
-- [ ] Confirm drive access post-restart
-- [ ] Investigate legacy alpha/depth/portrait frame reuse feasibility
-      (resolution, fps, visual spot-check)
-- [ ] Resolve `real-15s-60fps`'s source offset
+- [x] Confirm drive access
+- [x] Investigate legacy frame reuse (feasible for every panel except 3 and 7)
+- [x] Decide scope: the whole 214.8s song from `main-compiled-full.mov`
+- [x] `init` `.jobs/full-video` and populate panels 2/4/5/6 from legacy
+- [x] Keyframe-only background-plate, bigger windowed mask, tighter prompt,
+      per-fill leak check (pilot v1 + v2 reviewed by the user)
+- [ ] Panel 3 keyframe run (in progress)
+- [ ] Visual review of all panel 3 keyframe fills, regenerate bad ones
+- [ ] `background-stabilize` the full song, review in motion
 - [ ] Confirm `flux-fill-pro`'s real per-call rate from the dashboard
-- [ ] Decide reuse scope (legacy drive frames + `real-15s-60fps` overlap)
-- [ ] Get explicit cost sign-off before running any per-frame step
-- [ ] Decide whether to also fix `real-15s-60fps`'s own background-plate
-      (separate 361-call cost, not required for the full-video job)
+- [ ] Tune `repairGlitchedFrames` for long footage (or review its 80 flags)
+- [ ] Pick a dream direction, then get cost sign-off for panel 7
+- [ ] `compose` + publish
+- [ ] Decide whether to fix `real-15s-60fps`'s own panel 3 (~91 calls now)
 
 ## Open questions
 
-- Does "full video" mean the entire 165s, or a specific window within it?
-- Once cost is known: full 24fps, or a cheaper fps for a first full-length
-  pass (mirroring phase-5's scoped-down-first-pass approach)?
-- If legacy frames turn out reusable for alpha/depth/portrait, is it worth
-  also checking legacy outline/sketch frames, or is that model different
-  enough (packaged ArtLine vs. whatever the legacy local checkpoint was)
-  to not bother?
+- Should the leak check's false-positive rate (planks/flowers as skin) be
+  fixed before the next long run, or is ~3% wasted calls acceptable?
+- Is the soft haze on arms-wide frames acceptable, or should the mask
+  dilation scale with motion instead of being fixed?
+- `real-15s-60fps`'s offset within the song is still unresolved. Only
+  needed if anything from that job gets reused, which currently nothing is.

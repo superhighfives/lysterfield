@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { forEachFrame, framesDir, siblingFramePath, type Job } from '../job.ts'
+import { forEachFrame, framesDir, keyframeIndices, listFrames, siblingFramePath, type Job } from '../job.ts'
 import { reshapeMask } from '../mask.ts'
+import { LEAK_SCORE_THRESHOLD, scoreLeak } from '../leak-detection.ts'
 import { MODELS } from '../models.ts'
 import { readFileAsInput, runModelToFile } from '../replicate.ts'
 
@@ -23,9 +24,15 @@ export interface BackgroundPlateResult {
  * plus a lower `guidance` (see the call site below) reliably drops the
  * discrete-tree problem as a side effect, without a separate negative
  * prompt (flux-fill-pro's schema doesn't have one).
+ *
+ * The full-video pilot (frames 2001-2240, a wider fill area than the 15s
+ * clip) still invented defined objects: a paved road with lane markings,
+ * a red barn, a wind turbine, a power pole, a water channel, and one
+ * signature-like scribble. Hence the explicit "only grass, sky and the
+ * existing boardwalk" framing and the named exclusions at the end.
  */
 const FILL_PROMPT =
-  'soft hazy meadow, loose abstract watercolor wash, indistinct diffuse brushstrokes, no sharp edges or defined objects, muted washed-out palette, dreamlike atmospheric blur, natural continuation of the surrounding field'
+  'only open grassland, sky and the existing wooden boardwalk, soft hazy meadow, loose abstract watercolor wash, indistinct diffuse brushstrokes, no sharp edges or defined objects, muted washed-out palette, dreamlike atmospheric blur, natural continuation of the surrounding field, no buildings, no poles, no roads, no water, no text or signatures'
 
 /**
  * Mask reshaping itself (dilate + blur, `reshapeMask` in `../mask.ts`) is
@@ -99,46 +106,98 @@ function seedForJob(job: Job): number {
  * already-1024px input, flux-fill-pro's own output lands at 1024px too,
  * exactly `compose.ts`'s `PANEL_SIZE`, so this step's output is panel 3's
  * final frames directly.
+ *
+ * Only `background-stabilize`'s keyframes (every `fps/stepFps`-th frame)
+ * are filled — the stabilized panel only ever shows fill held from those
+ * frames, with panel 2's own frame as the base outside the mask, so
+ * filling the rest was ~3/4 of this step's Replicate cost for nothing.
+ * `stepFps` must match the value `background-stabilize` is run with.
  */
 export async function backgroundPlate(
   job: Job,
   inputFramesDir: string,
   alphaFramesDir: string,
   outputName: string,
-  concurrency: number
+  concurrency: number,
+  opts: { stepFps?: number } = {}
 ): Promise<BackgroundPlateResult> {
+  const stepFps = opts.stepFps ?? 6
+  if (job.fps % stepFps !== 0) {
+    throw new Error(`job.fps (${job.fps}) must be an exact multiple of stepFps (${stepFps})`)
+  }
+  const inputFrames = await listFrames(inputFramesDir)
+  const keyframes = new Set(keyframeIndices(inputFrames.length, job.fps / stepFps).map((i) => inputFrames[i]))
+
   const plateFramesDir = await framesDir(job, outputName)
+  const rejectedDir = path.join(plateFramesDir, '..', `${path.basename(plateFramesDir)}-rejected`)
+  await mkdir(rejectedDir, { recursive: true })
   const maskTmpDir = await mkdtemp(path.join(tmpdir(), 'lysterfield-background-plate-mask-'))
-  const seed = seedForJob(job)
+  const baseSeed = seedForJob(job)
 
   try {
     await forEachFrame(inputFramesDir, plateFramesDir, concurrency, async (inputPath, outputPath) => {
+      const frameIndex = inputFrames.indexOf(path.basename(inputPath))
       const alphaPath = await siblingFramePath(inputPath, alphaFramesDir)
+      // The mask covers the subject across this keyframe's whole hold
+      // window *and* the next keyframe — `background-stabilize` shows this
+      // fill for every frame until then, with a per-frame mask that moves
+      // with the subject, so the fill has to be clean everywhere they go.
+      const windowAlphaPaths = await Promise.all(
+        inputFrames
+          .slice(frameIndex, Math.min(inputFrames.length, frameIndex + job.fps / stepFps + 1))
+          .map((f) => siblingFramePath(path.join(inputFramesDir, f), alphaFramesDir))
+      )
       const frameBase = path.basename(inputPath, path.extname(inputPath))
       // Always PNG regardless of the source frame's format — this is a
       // freshly-generated temp mask (not a lookup), immediately fed to
       // flux-fill-pro and deleted, so there's no size benefit to making it
       // lossy and every reason to keep its blurred gradient exact.
       const reshapedMaskPath = path.join(maskTmpDir, `${frameBase}.png`)
-      await reshapeMask(alphaPath, reshapedMaskPath)
+      await reshapeMask(windowAlphaPaths, reshapedMaskPath)
 
-      await runModelToFile(
-        MODELS.backgroundInpaint,
-        {
-          image: await readFileAsInput(inputPath),
-          mask: await readFileAsInput(reshapedMaskPath),
-          prompt: FILL_PROMPT,
-          // Lower than flux-fill-pro's max (100) on purpose — less strict
-          // prompt adherence gives the model room to actually be loose/
-          // abstract instead of defaulting to a crisp, detailed object. See
-          // FILL_PROMPT's comment above.
-          guidance: 35,
-          seed,
-        },
-        outputPath,
-        { jpegQuality: 90 }
-      )
-    })
+      // Each earlier rejection of this frame (automatic below, or a manual
+      // `mv` into the rejected folder after review) bumps the seed, so a
+      // regeneration is a genuinely different fill. The seed stays
+      // otherwise fixed per scene (see seedForJob).
+      const priorRejections = async () =>
+        (await readdir(rejectedDir)).filter((f) => f.startsWith(`${frameBase}.`)).length
+      const generate = async (attempt: number) =>
+        runModelToFile(
+          MODELS.backgroundInpaint,
+          {
+            image: await readFileAsInput(inputPath),
+            mask: await readFileAsInput(reshapedMaskPath),
+            prompt: FILL_PROMPT,
+            // Lower than flux-fill-pro's max (100) on purpose — less strict
+            // prompt adherence gives the model room to actually be loose/
+            // abstract instead of defaulting to a crisp, detailed object. See
+            // FILL_PROMPT's comment above.
+            guidance: 35,
+            seed: baseSeed + attempt,
+          },
+          outputPath,
+          { jpegQuality: 90 }
+        )
+
+      const attempt = await priorRejections()
+      await generate(attempt)
+
+      // Free, local person-leak check on every fill as it lands. A failing
+      // fill is set aside and regenerated exactly once with the next seed;
+      // a second failure is kept and logged, and background-stabilize's
+      // own leak repair substitutes a neighboring keyframe for it. Capped
+      // at one regeneration so a bad stretch can't run up cost.
+      const score = await scoreLeak(outputPath, alphaPath)
+      if (score > LEAK_SCORE_THRESHOLD && attempt === 0) {
+        await rename(outputPath, path.join(rejectedDir, `${frameBase}.${attempt}${path.extname(outputPath)}`))
+        console.warn(`background-plate: ${frameBase} leak score ${score.toFixed(3)} — regenerating once with a new seed`)
+        await generate(attempt + 1)
+        const retryScore = await scoreLeak(outputPath, alphaPath)
+        if (retryScore > LEAK_SCORE_THRESHOLD) {
+          console.warn(`background-plate: ${frameBase} still scores ${retryScore.toFixed(3)} after regeneration — keeping it for stabilize's leak repair`)
+        }
+      }
+    }, { only: (frame) => keyframes.has(frame) })
   } finally {
     await rm(maskTmpDir, { recursive: true, force: true })
   }

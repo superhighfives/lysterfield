@@ -109,7 +109,8 @@ switch (step) {
       frameDirFlag(job, '2-portrait/upscaled', 'input'),
       frameDirFlag(job, 'alpha', 'alpha'),
       outputFlag('3-background/plate'),
-      concurrency
+      concurrency,
+      { stepFps: flags['step-fps'] ? Number(flags['step-fps']) : undefined }
     )
     console.log(JSON.stringify(result, null, 2))
     break
@@ -119,6 +120,7 @@ switch (step) {
     const job = await loadJob(requireFlag('job'))
     const result = await stabilizeBackground(
       job,
+      frameDirFlag(job, '2-portrait/upscaled', 'base'),
       frameDirFlag(job, '3-background/plate', 'input'),
       frameDirFlag(job, 'alpha', 'alpha'),
       outputFlag('3-background/stable'),

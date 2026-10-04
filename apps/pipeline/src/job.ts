@@ -67,9 +67,13 @@ export async function forEachFrame(
   inputDir: string,
   outputDir: string,
   concurrency: number,
-  fn: (inputPath: string, outputPath: string) => Promise<void>
+  fn: (inputPath: string, outputPath: string) => Promise<void>,
+  opts: { only?: (frame: string, index: number) => boolean } = {}
 ): Promise<void> {
-  const frames = (await readdir(inputDir)).filter(isFramePath).sort()
+  const frames = (await readdir(inputDir))
+    .filter(isFramePath)
+    .sort()
+    .filter((frame, i) => opts.only?.(frame, i) ?? true)
 
   let cursor = 0
   async function worker() {
@@ -83,6 +87,18 @@ export async function forEachFrame(
   }
 
   await Promise.all(Array.from({ length: concurrency }, worker))
+}
+
+/**
+ * Indices (0-based, into a sorted frame list) of a stepped sequence's
+ * keyframes — `0, interval, 2*interval, ...`. Shared by `background-plate`
+ * (which only generates fill at these frames) and `background-stabilize`
+ * (which only ever shows fill from them), so the two can't drift apart.
+ */
+export function keyframeIndices(frameCount: number, interval: number): number[] {
+  const indices: number[] = []
+  for (let i = 0; i < frameCount; i += interval) indices.push(i)
+  return indices
 }
 
 /** Path to the first (lowest-numbered) frame in a frame directory. */
