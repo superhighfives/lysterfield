@@ -95,15 +95,18 @@ export const VideoMaterial = shaderMaterial(
           // head's actual shape.
           float shape = blurPanel(uFrameDepth, vUv, uShapeRadius);
 
-          // Then a thin quarter-circle roll-off right at the matte's edge,
-          // so the silhouette curves away rather than ending in a cliff.
+          // Then a narrow roll-off right at the matte's edge, so the
+          // silhouette curves away rather than ending in a cliff. Smoothstep,
+          // not a quarter circle: a circle's profile goes vertical at the
+          // edge, and those near-vertical triangles stretched the outline's
+          // pixels into streaks (an ear smeared sideways) at ordinary tilt
+          // angles; smoothstep eases to a flat edge instead.
           // Matte coverage over the neighbourhood is ~0.5 on the edge and
           // 1.0 once fully inside, remapped to 0..1. Outside the matte the
           // relief is 0, which also drops the depth model's corner
           // flutter on the hidden part of the plane.
           float inside = clamp((blurPanel(uFrameMask, vUv, uEdgeRadius) - 0.5) * 2.0, 0.0, 1.0);
-          float t = 1.0 - inside;
-          float rolloff = sqrt(1.0 - t * t);
+          float rolloff = smoothstep(0.0, 1.0, inside);
 
           float relief = shape * rolloff * uDepthStrength * fadeAmount;
 
@@ -196,9 +199,10 @@ export const VideoMaterial = shaderMaterial(
       // samples a texel either side of wherever it lands, so a value sitting
       // right on the 0/1 boundary still blends in half a texel's worth of
       // the next frame over. Pulling the clamp in by one texel's width
-      // (each frame is a 512px slice of a 3584px atlas, so 1/512 of this
-      // frame's own [0, 1] span) keeps the sample, and its filter footprint,
-      // fully inside this frame.
+      // keeps the sample, and its filter footprint, fully inside this frame.
+      // 1/512 is one texel of the touch devices' video-small atlas (512px
+      // frames); desktop's full-size atlas has 1024px frames, where it's a
+      // conservative two.
       float localX = clamp(vUv.x - offsetX, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
 
       vec4 image = texture2D(uTexture, vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, uInvert == 1.0 ? 1.0 - vUv.y : vUv.y - offsetY));

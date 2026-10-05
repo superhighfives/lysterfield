@@ -310,7 +310,18 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
                 key={dream ? `${dream!.id}-mov` : 'video-mov'}
               />
             </video>
-            <div className="flex flex-col xs:flex-row w-[calc(100vw-4rem)] max-w-[400px] left-4 right-4 xs:space-x-3 items-center">
+            {/* `noautohide` on this, the one slotted control element: even
+                with autohide="-1", media-chrome sets `userinactive` on the
+                controller when it connects and only clears it on the first
+                pointer move — so the pill rendered empty until the mouse
+                moved, which a URL/history restore (land on the player,
+                having only clicked the welcome button) made likely. Its
+                hiding CSS skips slotted controls carrying `noautohide`. Set
+                via ref: it's not a React-known DOM attribute. */}
+            <div
+              ref={(el) => el?.setAttribute('noautohide', '')}
+              className="flex flex-col xs:flex-row w-[calc(100vw-4rem)] max-w-[400px] left-4 right-4 xs:space-x-3 items-center"
+            >
               <div className="flex self-stretch justify-center border-b xs:border-r xs:border-b-0 border-yellow-500">
                 <Footer />
                 <div className="group flex relative">

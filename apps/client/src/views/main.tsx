@@ -26,10 +26,14 @@ import { useIdle } from '@uidotdev/usehooks'
 // DEPTH_SHAPE_RADIUS of the panel into rounded forms first, with a thin
 // DEPTH_EDGE_RADIUS roll-off at the matte's edge. Smaller blur radii
 // (0.05) brought the block-head back; 0.12 at strength 0.3 gave the most
-// depth while still reading as a head on shoulders.
+// depth while still reading as a head on shoulders. Checked across four
+// more dreams (they share source footage, so the depth panels match) and
+// several poses: the edge radius was widened 0.02 -> 0.04 with a smoother
+// roll-off (see the vertex shader) after the head's outline smeared at
+// realistic tilt angles.
 const DEPTH_STRENGTH = 0.3
 const DEPTH_SHAPE_RADIUS = 0.12
-const DEPTH_EDGE_RADIUS = 0.02
+const DEPTH_EDGE_RADIUS = 0.04
 // Unsharp-mask amount for the portrait panel. The softness is mostly at
 // source, so this firms up edges (hair, necklace) rather than adding
 // detail; 1.5 showed no halos, 1.2 leaves some margin.
