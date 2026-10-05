@@ -119,7 +119,7 @@ export async function backgroundPlate(
   alphaFramesDir: string,
   outputName: string,
   concurrency: number,
-  opts: { stepFps?: number } = {}
+  opts: { stepFps?: number; regenerateLeaks?: boolean } = {}
 ): Promise<BackgroundPlateResult> {
   const stepFps = opts.stepFps ?? 6
   if (job.fps % stepFps !== 0) {
@@ -182,13 +182,18 @@ export async function backgroundPlate(
       const attempt = await priorRejections()
       await generate(attempt)
 
-      // Free, local person-leak check on every fill as it lands. A failing
-      // fill is set aside and regenerated exactly once with the next seed;
-      // a second failure is kept and logged, and background-stabilize's
-      // own leak repair substitutes a neighboring keyframe for it. Capped
-      // at one regeneration so a bad stretch can't run up cost.
+      // Free, local person-leak check on every fill as it lands. By default
+      // it only logs: on full-video it flagged ~1 in 5 fills, and 11 of 12
+      // sampled were false positives (planks and orange flowers read as
+      // skin). It also can't see a figure from behind, the commonest real
+      // leak, so visual review is what actually catches leaks.
+      // `regenerateLeaks` opts back into one capped regeneration per frame
+      // (the original goes to the rejected folder, and the redo uses the
+      // next seed). A second failure is kept for stabilize's leak repair.
       const score = await scoreLeak(outputPath, alphaPath)
-      if (score > LEAK_SCORE_THRESHOLD && attempt === 0) {
+      if (score > LEAK_SCORE_THRESHOLD && !opts.regenerateLeaks) {
+        console.warn(`background-plate: ${frameBase} leak score ${score.toFixed(3)} — flagged for review (not regenerated)`)
+      } else if (score > LEAK_SCORE_THRESHOLD && attempt === 0) {
         await rename(outputPath, path.join(rejectedDir, `${frameBase}.${attempt}${path.extname(outputPath)}`))
         console.warn(`background-plate: ${frameBase} leak score ${score.toFixed(3)} — regenerating once with a new seed`)
         await generate(attempt + 1)

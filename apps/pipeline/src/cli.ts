@@ -110,7 +110,10 @@ switch (step) {
       frameDirFlag(job, 'alpha', 'alpha'),
       outputFlag('3-background/plate'),
       concurrency,
-      { stepFps: flags['step-fps'] ? Number(flags['step-fps']) : undefined }
+      {
+        stepFps: flags['step-fps'] ? Number(flags['step-fps']) : undefined,
+        regenerateLeaks: flags['regenerate-leaks'] === 'true',
+      }
     )
     console.log(JSON.stringify(result, null, 2))
     break
