@@ -1,8 +1,8 @@
 ---
 title: "Phase 4b: player and choose-screen polish after the React 19 migration"
-status: In Progress
+status: Complete
 created: 2026-09-30
-updated: 2026-09-30
+updated: 2026-10-04
 ---
 
 # Phase 4b: player and choose-screen polish after the React 19 migration
@@ -158,16 +158,74 @@ a worktree at the pre-migration commit (`bece8e8`: fiber 8.13.5/drei
       adjacent cards per the user's own diagnosis (commit `f245175`),
       verified clean across several auto-scroll passes including both
       stray `dream-v1`/`dream-styletransfer-v2-fixed` placeholder cards
-      at their steepest angle. Neither pass could reliably force the
-      *exact* originally-screenshotted moment on demand, so this is a
-      strong-but-not-ironclad fix — worth a final live look.
-- [ ] Re-verify against the live production reference after each fix —
-      not yet done; production still hasn't been redeployed since the
-      React 19 migration (`b878890`), so there's nothing current to
-      compare against yet. Needs a `bun run deploy`/`deploy-prod` first.
-- [ ] Move this doc to `plans/done/` once resolved and confirmed.
+      at their steepest angle. **Superseded:** `f245175` was reverted in
+      `a572be1` because it caused a severe zoom regression through drei's
+      `<Center>`. The overlap was then fixed for real in phase 4c, which
+      draws the cards as per-card depth layers (see
+      `plans/done/phase-4c-frontend-polish.md`).
+- [ ] Re-verify against the live production reference. This can't be
+      done yet: production hasn't been redeployed since the React 19
+      migration (`b878890`). It moves to Follow-ups, since it's a
+      post-deploy check rather than outstanding work.
 
-## Open questions
+## Overview
 
-- Does the height/proportions fix apply to the mobile (`xs:`) breakpoint
-  too, or just desktop?
+Phase 4b was the first side-by-side comparison of the React 19 / fiber v9
+/ drei v10 client against production (still pre-migration), and it fixed
+what that surfaced.
+
+What turned out not to be a bug:
+
+- **The suspected camera zoom regression** was a comparison artifact.
+  The reference screenshots matched in aspect ratio but not window size,
+  and the scene's on-screen size scales with window size by design.
+  Runtime viewport and camera numbers were identical across versions.
+- **The missing audio** was the deliberate localhost-only dev mute. The
+  composed media does carry audio tracks.
+
+Real fixes:
+
+- the playhead pill fading out mid-playback (media-chrome's autohide)
+- a stray text-shadow halo on the time preview
+- the pill's height and proportions, matched to the reference design
+  (desktop/`xs:` only)
+- a jank pass, the biggest item being a per-frame store write that
+  re-rendered `Scene` and `Playhead` 60× a second during scroll
+
+The carousel-overlap item was attempted here, but the attempt was
+reverted, and phase 4c delivered the real fix.
+
+## Architecture
+
+All changes are in `apps/client`.
+
+- **Playhead autohide** (`playhead.tsx`): `autohide="-1"` on
+  `<MediaController>`, its JS-level switch. `noAutohide` on the
+  controller matched nothing, because the CSS opt-out is per slotted
+  control. That turned out to be incomplete: media-chrome also sets
+  `userinactive` when it connects, so the pill was empty until the first
+  pointer move. Phase 4c finished it with `noautohide` on the slotted
+  control row.
+- **Time-preview halo**: `--media-preview-time-text-shadow: none` on the
+  pill.
+- **Pill size**: 400×34 at `xs:` (from a pixel-measured reference), with
+  smaller icons and padding. The two-row mobile layout is unchanged.
+- **Jank** (`770ac72`): `polaroidVisible` is read non-reactively via
+  `getState()` inside `useFrame`. `Playhead` subscribes only to a derived
+  `polaroidPillVisible` boolean, written when it crosses its threshold.
+  A per-frame `Vector2` allocation is reused (but not `globalPointer`,
+  whose reference identity the recalibration watcher relies on).
+  `Polaroid`'s static transform arrays are hoisted out of render.
+  `config.molasses` easing is a deliberate "dreamy" choice, not a bug.
+- **Carousel overlap**: a `renderOrder` attempt (`721c9b2`) didn't fix
+  it, and the Z-separation attempt (`f245175`) was reverted (`a572be1`).
+  Phase 4c replaced both with per-card depth layering.
+
+## Follow-ups
+
+- **After the next deploy**, compare the live site against these fixes.
+  Nothing current exists to compare against until production is
+  redeployed post-React-19.
+- **Mobile pill proportions**: still open whether the height and
+  proportions fix should also apply to the two-row mobile (below `xs:`)
+  layout. It needs a mobile reference design.

@@ -10,7 +10,7 @@ updated: 2026-10-04
 ## Goal
 
 A second front-end-only polish phase, after
-[`plans/in-progress/phase-4b-player-and-choose-screen-polish.md`](../in-progress/phase-4b-player-and-choose-screen-polish.md).
+[`plans/done/phase-4b-player-and-choose-screen-polish.md`](./phase-4b-player-and-choose-screen-polish.md).
 Seven user-reported items with no shared root cause, spanning visual design
 (dark mode, lyric-text contrast, depth shader shape/intensity), playback
 reliability (buffering, stuck-on-first-frame), and navigation (browser
