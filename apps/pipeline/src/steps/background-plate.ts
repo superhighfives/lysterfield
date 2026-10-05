@@ -37,6 +37,12 @@ export interface BackgroundPlateResult {
  * and distant walkers at the far end. Bumping the seed alone reproduced
  * them almost exactly, hence the leading positive "empty, deserted, with
  * nobody on it" framing.
+ *
+ * "no text or signatures" was swapped for "a plain unsigned painting":
+ * naming signatures seemed to prime them. ~75 full-run fills (mostly the
+ * second clip) had a faint script signature inside the mask. The reworded
+ * prompt removed it in 3/3 tests but shifts the look, so regenerate a
+ * stretch as a whole rather than alternating prompts per keyframe.
  */
 const FILL_PROMPT =
   'an empty, deserted landscape with nobody on the boardwalk, only open grassland, sky and the existing wooden boardwalk, soft hazy meadow, loose abstract watercolor wash, indistinct diffuse brushstrokes, no sharp edges or defined objects, muted washed-out palette, dreamlike atmospheric blur, natural continuation of the surrounding field, no buildings, no poles, no roads, no water, a plain unsigned painting'

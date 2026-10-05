@@ -110,6 +110,30 @@ regenerate it.
 - Per-call price still **unconfirmed**. The user is checking the Replicate
   dashboard. It's believed to be ~$0.05/image.
 
+### Round 2-3 review (2026-10-05)
+
+- The detached run finished cleanly (all 1,289 keyframes; 1,290 with the
+  stray boundary keyframe dropped in the pilot).
+- Seed-bump regeneration alone reproduced the same walkers and huts, so
+  `FILL_PROMPT` now leads with "an empty, deserted landscape with nobody
+  on the boardwalk". The 18 bad redos were regenerated with it and came
+  out clean. 0713 and 0965 keep red spiky horizon shapes that are panel
+  2's own, which is accepted.
+- **Signatures:** ~75 fills (mostly 3601-4905) had a faint script
+  signature that shows through the mask in the final panel. Naming them in
+  the prompt seemed to prime them, so it's now "a plain unsigned
+  painting" (3/3 clean in a test). That shifts the look, so per the user
+  (option 1) **all of 3601-5153 is being regenerated as one stretch**
+  with the new prompt, plus scattered rejects 0133, 0681, 0805, 0849,
+  2609, 3193, 3385 (signatures/text), 3577-3585 (red figure, red barn) and
+  3653 (animals, in range). That's 398 fills in total, listed in
+  `3-background/round3-rejects.txt`. 4733 was already clean on the new
+  prompt and is kept.
+- Round 3 is running detached (log `3-background/plate-run.log`). Review
+  3601-5153 plus the scattered ten when it lands.
+- Review tip: signatures sit in the lower-right fill area and are too
+  faint for 48-up sheets. Crop `crop=464:240:560:770` at 96-up instead.
+
 ## Next steps
 
 1. Confirm the detached panel 3 run is alive (commands above) and let it
