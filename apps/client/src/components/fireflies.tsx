@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useScroll } from '@react-three/drei'
 import {
@@ -36,6 +36,9 @@ import { useStore } from '../store'
 // second back.
 const SCATTER_RATE_OUT = 0.8
 const SCATTER_RATE_BACK = 5
+// The swarm's first arrival, when the scene appears: gentler than the
+// quick return from the player, so it reads as an entrance.
+const SCATTER_RATE_INTRO = 1.2
 // The swarm's vertical band, as a multiple of the viewport height — a
 // little taller than the frame so the scroll-parallax wrap happens off it.
 const SPREAD_Y = 1.3
@@ -148,6 +151,8 @@ function Swarm({
   const dpr = useThree((state) => state.viewport.dpr)
   const colorScheme = useStore((state) => state.colorScheme)
   const scroll = useScroll()
+  // Whether the swarm has finished its first fly-in (see SCATTER_RATE_INTRO).
+  const arrived = useRef(false)
 
   const geometry = useMemo(() => {
     const positions = new Float32Array(count * 3)
@@ -180,7 +185,9 @@ function Swarm({
           uPixelRatio: { value: 1 },
           uColor: { value: new Color() },
           uOpacity: { value: 1 },
-          uScatter: { value: 0 },
+          // Starts fully scattered, so the swarm flies in from the edges
+          // when the scene first appears.
+          uScatter: { value: 1 },
           uExtent: { value: 1 },
           uScroll: { value: 0 },
           uParallax: { value: parallax },
@@ -226,10 +233,15 @@ function Swarm({
     const { dream, videoPlaying, resetting } = useStore.getState()
     const target = dream && videoPlaying && !resetting ? 1 : 0
     const scatter = material.uniforms.uScatter
+    if (scatter.value < 0.01) arrived.current = true
     scatter.value = MathUtils.damp(
       scatter.value,
       target,
-      target > scatter.value ? SCATTER_RATE_OUT : SCATTER_RATE_BACK,
+      target > scatter.value
+        ? SCATTER_RATE_OUT
+        : arrived.current
+        ? SCATTER_RATE_BACK
+        : SCATTER_RATE_INTRO,
       delta
     )
     // How far the page content has scrolled, in world units (drei's
