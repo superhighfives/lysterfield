@@ -66,12 +66,16 @@ const Playhead = forwardRef<HTMLVideoElement, HTMLProps<HTMLVideoElement>>(
       // the new source's duration is known. Only cleared once the seek
       // actually happens, so StrictMode's double-run doesn't drop it.
       const resume = useStore.getState().resume
+      const resumeTime = resume?.dreamId === dream.id ? resume.time : null
       const seek = () => {
-        if (resume!.time < el.duration) el.currentTime = resume!.time
+        if (resumeTime !== null && resumeTime < el.duration) {
+          el.currentTime = resumeTime
+        }
+
         setResume(null)
       }
 
-      if (resume?.dreamId === dream.id) {
+      if (resumeTime !== null) {
         el.addEventListener('loadedmetadata', seek, { once: true })
       }
 

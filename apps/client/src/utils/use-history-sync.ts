@@ -124,7 +124,9 @@ export function useHistorySync(video: RefObject<HTMLVideoElement | null>) {
 
     const handlePageShow = (event: PageTransitionEvent) => {
       if (event.persisted && wasPlaying && el.paused) {
-        el.play().catch(() => {})
+        el.play().catch((error: DOMException) => {
+          console.warn(`Playback didn't resume: ${error.name}`)
+        })
       }
     }
 
