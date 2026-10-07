@@ -34,7 +34,15 @@ export const PolaroidMaterial = shaderMaterial(
     uniform float uHover;
 
     void main() {      
-      vec2 position = (vUv.xy * 0.8) + 0.1 + (vVertCoord - 0.5);
+      // The photo is inset 10% on each side (vUv * 0.8 + 0.1) to leave room
+      // for this screen-position parallax offset. The offset is built from
+      // clip-space coordinates (before the perspective divide), so it grows
+      // steeply toward the screen's edges — cards far out to the side (more
+      // of them since the carousel grew and cards turn toward the cursor)
+      // overshot that room and sampled off the image entirely, showing a
+      // blank photo. Clamped to the room the inset actually leaves.
+      vec2 parallax = clamp(vVertCoord - 0.5, -0.1, 0.1);
+      vec2 position = (vUv.xy * 0.8) + 0.1 + parallax;
       vec4 image = texture2D(uTexture, position);
       gl_FragColor = image;
 

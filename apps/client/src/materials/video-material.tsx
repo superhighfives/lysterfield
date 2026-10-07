@@ -18,6 +18,24 @@ const uniforms = {
   uAvatar: 0,
   uFrameSketch: 0,
   uIdle: 0,
+  // How far the avatar's depth-map relief pushes toward the camera, in
+  // world units at full depth (depth panel = 1.0) and full fade-in.
+  uDepthStrength: 0,
+  // Panel-UV radii for the avatar's depth shaping: how far the depth map is
+  // blurred into rounded forms, and how wide the roll-off at the matte's
+  // edge is. See the vertex shader.
+  uShapeRadius: 0,
+  uEdgeRadius: 0,
+  // Unsharp-mask amount for the avatar's portrait (0 = off).
+  uSharpen: 0,
+  // 0 = light, 1 = dark. Drives the intro/outro fade colour and the
+  // background that uBackgroundMix blends toward.
+  uDark: 0,
+  // Permanent blend of `image` toward a flat colour that contrasts with
+  // the page (black in light mode, white in dark mode) — 0 leaves the
+  // sampled colour alone. Only the lyrics mesh sets this, so its
+  // dream-video fill reads against the page and polaroid in either mode.
+  uBackgroundMix: 0,
 }
 
 export const VideoMaterial = shaderMaterial(
@@ -28,6 +46,7 @@ export const VideoMaterial = shaderMaterial(
     uniform sampler2D uTexture;
     uniform float uFrameSelected;
     uniform float uFrameDepth;
+    uniform float uFrameMask;
     uniform float uFrameTotal;
     uniform float uOpacity;
     uniform float uFrameOverlay;
@@ -35,7 +54,28 @@ export const VideoMaterial = shaderMaterial(
     uniform vec2 uPointerRelative;
     varying vec2 texCoord;
     uniform float uTime;
-    
+    uniform float uDepthStrength;
+    uniform float uShapeRadius;
+    uniform float uEdgeRadius;
+
+    // Samples one panel of the 7-panel atlas, clamped (like the fragment
+    // shader's localX) so a lookup never bleeds into the neighbouring panel.
+    float samplePanel(float panel, vec2 uv) {
+      float x = clamp(uv.x, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
+      return texture2D(uTexture, vec2((x + (panel - 1.0)) / uFrameTotal, clamp(uv.y, 0.0, 1.0))).r;
+    }
+
+    // A panel's average over a 5x5 neighbourhood spanning +/-radius.
+    float blurPanel(float panel, vec2 uv, float radius) {
+      float sum = 0.0;
+      for (int x = -2; x <= 2; x++) {
+        for (int y = -2; y <= 2; y++) {
+          sum += samplePanel(panel, uv + vec2(float(x), float(y)) * (radius / 2.0));
+        }
+      }
+      return sum / 25.0;
+    }
+
     void main(){
         vUv = uv;
         float intensity = 0.0;
@@ -43,9 +83,34 @@ export const VideoMaterial = shaderMaterial(
         float fadeAmount = clamp((uTime / 4.0) - 1.25, 0.0, 1.0);
 
         if(uFrameDepth != 0.0) {
-          vec4 mask = texture2D(uTexture, vec2((vUv.x + (uFrameDepth - 1.0)) / uFrameTotal, vUv.y));
-          float depth = ((mask.r + (vUv.y * 2.0)) / 8.0) * fadeAmount;
-          intensity = (0.75 * depth + 0.05);
+          // The whole plane leans back toward the bottom and sits a little
+          // forward — a flat offset, unaffected by the matte.
+          float lean = (0.1875 * vUv.y) * fadeAmount + 0.05;
+
+          // The depth panel is coarse — bright is near, but a head comes
+          // through as one flat plateau, and pushing that forward as-is
+          // extrudes the head like a block. Blurring it heavily turns each
+          // plateau into a rounded hill (and blends the neck smoothly into
+          // the shoulders, rather than pinching it), which reads as a
+          // head's actual shape.
+          float shape = blurPanel(uFrameDepth, vUv, uShapeRadius);
+
+          // Then a narrow roll-off right at the matte's edge, so the
+          // silhouette curves away rather than ending in a cliff. Smoothstep,
+          // not a quarter circle: a circle's profile goes vertical at the
+          // edge, and those near-vertical triangles stretched the outline's
+          // pixels into streaks (an ear smeared sideways) at ordinary tilt
+          // angles; smoothstep eases to a flat edge instead.
+          // Matte coverage over the neighbourhood is ~0.5 on the edge and
+          // 1.0 once fully inside, remapped to 0..1. Outside the matte the
+          // relief is 0, which also drops the depth model's corner
+          // flutter on the hidden part of the plane.
+          float inside = clamp((blurPanel(uFrameMask, vUv, uEdgeRadius) - 0.5) * 2.0, 0.0, 1.0);
+          float rolloff = smoothstep(0.0, 1.0, inside);
+
+          float relief = shape * rolloff * uDepthStrength * fadeAmount;
+
+          intensity = lean + relief;
         }
 
         vec3 newPosition = vec3(position.x, position.y, position.z + intensity);
@@ -69,6 +134,10 @@ export const VideoMaterial = shaderMaterial(
     uniform float uTime;
     uniform float uAvatar;
     uniform float uIdle;
+    uniform float uDark;
+    uniform float uBackgroundMix;
+    uniform float uSharpen;
+    const float SHARPEN_TEXELS = 1.5;
 
     vec3 blendMultiply(vec3 base, vec3 blend) {
       return base*blend;
@@ -130,12 +199,29 @@ export const VideoMaterial = shaderMaterial(
       // samples a texel either side of wherever it lands, so a value sitting
       // right on the 0/1 boundary still blends in half a texel's worth of
       // the next frame over. Pulling the clamp in by one texel's width
-      // (each frame is a 512px slice of a 3584px atlas, so 1/512 of this
-      // frame's own [0, 1] span) keeps the sample, and its filter footprint,
-      // fully inside this frame.
+      // keeps the sample, and its filter footprint, fully inside this frame.
+      // 1/512 is one texel of the touch devices' video-small atlas (512px
+      // frames); desktop's full-size atlas has 1024px frames, where it's a
+      // conservative two.
       float localX = clamp(vUv.x - offsetX, 1.0 / 512.0, 1.0 - 1.0 / 512.0);
 
       vec4 image = texture2D(uTexture, vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, uInvert == 1.0 ? 1.0 - vUv.y : vUv.y - offsetY));
+
+      // Unsharp mask: push each pixel away from the average of its four
+      // neighbours (SHARPEN_TEXELS atlas texels away). The portrait panel
+      // is soft at source — stylised, then VP9-compressed — so this
+      // recovers some edge definition rather than adding real detail.
+      if(uSharpen != 0.0) {
+        vec2 uv = vec2((localX + (uFrameSelected - 1.0)) / uFrameTotal, vUv.y - offsetY);
+        vec2 texel = SHARPEN_TEXELS / vec2(textureSize(uTexture, 0));
+        vec3 blur = (
+          texture2D(uTexture, uv + vec2(texel.x, 0.0)).rgb +
+          texture2D(uTexture, uv - vec2(texel.x, 0.0)).rgb +
+          texture2D(uTexture, uv + vec2(0.0, texel.y)).rgb +
+          texture2D(uTexture, uv - vec2(0.0, texel.y)).rgb
+        ) / 4.0;
+        image.rgb = clamp(image.rgb + (image.rgb - blur) * uSharpen, 0.0, 1.0);
+      }
       vec4 mask = texture2D(uTexture, vec2((localX + (uFrameMask - 1.0)) / uFrameTotal, vUv.y - offsetY));
 
       float mixValue = uMaskIntensity;
@@ -143,10 +229,19 @@ export const VideoMaterial = shaderMaterial(
       float fadeAmount = 1.0 - clamp((uTime / 4.0) - 1.0, 0.0, 1.0);
       float extendedFadeAmount = 1.0 - clamp((uTime / 4.0), 0.25, 1.0);
 
-      vec3 colorA = vec3(0.912, 0.921, 0.929);
-      vec3 colorB = vec3(0.95, 0.95, 0.92);
+      // The intro/outro fade colour — a soft gradient close to the page
+      // background in each mode, so the scene fades in from (and out to)
+      // the page rather than flashing white in dark mode. Still called
+      // "white" since that's what it is in the light-mode default.
+      vec3 colorA = mix(vec3(0.912, 0.921, 0.929), vec3(0.047, 0.039, 0.035), uDark);
+      vec3 colorB = mix(vec3(0.95, 0.95, 0.92), vec3(0.11, 0.098, 0.09), uDark);
       vec3 color = mix(colorA, colorB, vUv.y);
       vec4 white = vec4(vec3(color), 1.0);
+
+      if(uBackgroundMix != 0.0) {
+        vec3 background = mix(vec3(0.0), vec3(1.0), uDark);
+        image = vec4(mix(image.rgb, background, uBackgroundMix), image.a);
+      }
 
       if(uFrameOverlay != 0.0) {
         fadeAmount = extendedFadeAmount;

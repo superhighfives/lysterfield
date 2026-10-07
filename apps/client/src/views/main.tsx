@@ -1,5 +1,5 @@
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
-import { RefObject, useEffect, useRef } from 'react'
+import { RefObject, useRef } from 'react'
 import { VideoMaterial, VideoMaterialProps } from '../materials/video-material'
 import Polaroid from '../models/polaroid'
 import { isVideoPlaying } from '../utils'
@@ -19,6 +19,26 @@ import { animated, config, useSpring } from '@react-spring/three'
 // eslint-disable-next-line import/named -- useIdle is a real export (confirmed at runtime); eslint-plugin-import's static resolver doesn't handle this package's minimal `exports` map correctly
 import { useIdle } from '@uidotdev/usehooks'
 
+// Avatar depth, see video-material.tsx's vertex shader. Tuned by eye on
+// 20230808103741, comparing side-on renders: the depth panel is too coarse
+// to push forward as-is (a head comes through as a flat plateau, which
+// extruded into a block on a pinched neck), so it's blurred across
+// DEPTH_SHAPE_RADIUS of the panel into rounded forms first, with a thin
+// DEPTH_EDGE_RADIUS roll-off at the matte's edge. Smaller blur radii
+// (0.05) brought the block-head back; 0.12 at strength 0.3 gave the most
+// depth while still reading as a head on shoulders. Checked across four
+// more dreams (they share source footage, so the depth panels match) and
+// several poses: the edge radius was widened 0.02 -> 0.04 with a smoother
+// roll-off (see the vertex shader) after the head's outline smeared at
+// realistic tilt angles.
+const DEPTH_STRENGTH = 0.3
+const DEPTH_SHAPE_RADIUS = 0.12
+const DEPTH_EDGE_RADIUS = 0.04
+// Unsharp-mask amount for the portrait panel. The softness is mostly at
+// source, so this firms up edges (hair, necklace) rather than adding
+// detail; 1.5 showed no halos, 1.2 leaves some margin.
+const AVATAR_SHARPEN = 1.2
+
 function Main(
   props: ThreeElements['group'] & {
     video: RefObject<HTMLVideoElement | null>
@@ -34,19 +54,13 @@ function Main(
     (isVisible) => (polaroidVisible.current = isVisible)
   )
 
-  const ready = useStore((state) => state.ready)
   const dream = useStore((state) => state.dream)
   const resetting = useStore((state) => state.resetting)
   const isMobile = useStore((state) => state.isMobile)
   const isTouch = useStore((state) => state.isTouch)
   const setGlobalPointer = useStore((state) => state.setGlobalPointer)
-
-  useEffect(() => {
-    console.log(`Starting playback: ${ready}`)
-    if (dream?.id) {
-      videoElement.play()
-    }
-  }, [dream])
+  const colorScheme = useStore((state) => state.colorScheme)
+  const dark = colorScheme === 'dark' ? 1 : 0
 
   const gl = useThree((state) => state.gl)
 
@@ -56,10 +70,17 @@ function Main(
         const texture = new VideoTexture(videoElement)
         texture.colorSpace = gl.outputColorSpace
 
-        if (videoElement.readyState === 4) {
+        // Checks for the same state the listener below waits for. This used
+        // to check for HAVE_ENOUGH_DATA (4) instead, so landing here after
+        // `loadedmetadata` had already fired but before the element reached
+        // 4 waited on an event that never comes — the scene sat on the
+        // loading screen forever.
+        if (videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
           res(texture)
         } else {
-          videoElement.addEventListener('loadedmetadata', () => res(texture))
+          videoElement.addEventListener('loadedmetadata', () => res(texture), {
+            once: true,
+          })
         }
       }),
     [videoElement]
@@ -224,6 +245,7 @@ function Main(
               uFrameMask={3}
               uOpacity={1}
               uFrameOverlay={3}
+              uDark={dark}
             />
           }
         />
@@ -234,7 +256,7 @@ function Main(
           scale={scale}
           name="avatar"
         >
-          <planeGeometry args={[1, 1, 500, 500]} />
+          <planeGeometry args={[1, 1, 256, 256]} />
           <videoMaterial
             ref={avatarMaterial}
             key={VideoMaterial.key}
@@ -247,6 +269,11 @@ function Main(
             uAvatar={1}
             uOpacity={1}
             uMaskIntensity={1}
+            uDepthStrength={DEPTH_STRENGTH}
+            uShapeRadius={DEPTH_SHAPE_RADIUS}
+            uEdgeRadius={DEPTH_EDGE_RADIUS}
+            uSharpen={AVATAR_SHARPEN}
+            uDark={dark}
           />
         </animated.mesh>
 
@@ -263,6 +290,8 @@ function Main(
             uFrameTotal={7}
             uInvert={1}
             uOpacity={1}
+            uBackgroundMix={0.5}
+            uDark={dark}
           />
         </mesh>
       </animated.group>

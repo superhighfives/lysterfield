@@ -23,6 +23,13 @@
 }
 
 :root {
+  /* The page background is a shallow radial "bowl". In dark mode it's a
+     little lighter in the middle, falling off to the edges (flat black read
+     as a void); in light mode it's inverted, and very subtle: a touch of
+     shade in the middle, brightening to the edges. */
+  --bowl-centre: #efedea;
+  --bowl-edge: #fafaf9;
+
   line-height: 1.5;
   font-weight: 400;
 
@@ -39,9 +46,23 @@
   }
 }
 
+:root.dark {
+  --bowl-centre: #1a1715;
+  --bowl-edge: #0a0908;
+}
+
 html,
 body {
   overscroll-behavior-x: none;
+}
+
+body {
+  background-color: var(--bowl-edge);
+  background-image: radial-gradient(
+    ellipse 120% 90% at 50% 45%,
+    var(--bowl-centre),
+    var(--bowl-edge)
+  );
 }
 
 html,

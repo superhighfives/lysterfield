@@ -35,11 +35,34 @@ useTexture.preload('images/action-scroll.png')
 useTexture.preload('images/choose.png')
 dreams.forEach((dream) => useTexture.preload(`/assets/${dream.id}/hero.jpg`))
 
+// The welcome/choose/scroll-hint artwork is black ink on transparent —
+// inverted to white ink in dark mode so it still reads against the page.
+const invertInk = (shader: { fragmentShader: string }) => {
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <map_fragment>',
+    '#include <map_fragment>\n  diffuseColor.rgb = 1.0 - diffuseColor.rgb;'
+  )
+}
+
+// How far the whole carousel sits toward the camera, in world units —
+// making the cards bigger on screen without changing their spacing or
+// fan. Applied to the group around Slider, like the scale below, so
+// drei's <Center> inside it is unaffected.
+const CAROUSEL_FORWARD = 0.25
+
+const CAROUSEL_REFERENCE_HEIGHT = 900
+const CAROUSEL_MIN_SCALE = 0.6
+
 function Choose(props: ThreeElements['group']) {
   const collection = useStore((state) => state.collection)
   const isMobile = useStore((state) => state.isMobile)
   const dream = useStore((state) => state.dream)
   const setDream = useStore((state) => state.setDream)
+  const colorScheme = useStore((state) => state.colorScheme)
+  const dark = colorScheme === 'dark'
+  // A fresh material per scheme (via `key`) rather than toggling
+  // onBeforeCompile on the existing one, which wouldn't recompile.
+  const inkProps = { onBeforeCompile: dark ? invertInk : undefined }
   const setPolaroidVisible = useStore((state) => state.setPolaroidVisible)
   const setPolaroidPillVisible = useStore(
     (state) => state.setPolaroidPillVisible
@@ -70,6 +93,16 @@ function Choose(props: ThreeElements['group']) {
     [collection]
   )
 
+  // Choosing a card already leaves the page scrolled down to the player,
+  // but a dream restored from the URL or browser history (see
+  // utils/use-history-sync.ts) arrives with the page at the top — scroll
+  // down to it. Done from useFrame once the scroll container has a real
+  // height, since on a cold load the dream is set as the scene mounts.
+  const scrollToPlayer = useRef(false)
+  useEffect(() => {
+    if (dream) scrollToPlayer.current = true
+  }, [dream])
+
   useEffect(() => {
     if (titleVisible) {
       titleMask.source.data.play()
@@ -77,6 +110,20 @@ function Choose(props: ThreeElements['group']) {
   }, [titleVisible])
 
   const { height: h } = useThree((state) => state.viewport)
+
+  // The carousel is sized in world units, which makes it a fixed share of
+  // the canvas height — as tall a share on a big external monitor as on a
+  // laptop, where it reads as enormous. Past CAROUSEL_REFERENCE_HEIGHT CSS
+  // pixels of canvas, it's scaled down to hold roughly that on-screen size.
+  // Applied to the group *around* Slider, not inside it: drei's <Center>
+  // in Slider measures in its own local space, so an ancestor's scale
+  // doesn't disturb the offset it bakes in at mount.
+  const canvasHeight = useThree((state) => state.size.height)
+  const carouselScale = MathUtils.clamp(
+    CAROUSEL_REFERENCE_HEIGHT / canvasHeight,
+    CAROUSEL_MIN_SCALE,
+    1
+  )
 
   const data = useScroll()
   // These all used to be React state, recomputed every frame via useFrame —
@@ -104,11 +151,24 @@ function Choose(props: ThreeElements['group']) {
   )
 
   const [{ position: polaroidPosition }, polaroidApi] = useSpring(() => ({
-    position: [0, -h * 1.8, 0],
+    position: [0, -h * 1.8, CAROUSEL_FORWARD],
     config: { ...config.molasses, precision: 0.0000001 },
   }))
 
   useFrame(() => {
+    if (scrollToPlayer.current) {
+      // ScrollControls ignores scroll events until a frame after it starts
+      // listening, so a jump made in that window is silently dropped — keep
+      // re-announcing it until its offset actually starts moving.
+      const max = data.el.scrollHeight - data.el.clientHeight
+      if (data.offset > 0.01) {
+        scrollToPlayer.current = false
+      } else if (max > 0) {
+        if (data.el.scrollTop < max) data.el.scrollTop = max
+        else data.el.dispatchEvent(new Event('scroll'))
+      }
+    }
+
     const nextPolaroidVisibility = !dream
       ? MathUtils.lerp(
           polaroidVisibilityRef.current,
@@ -118,7 +178,11 @@ function Choose(props: ThreeElements['group']) {
       : MathUtils.lerp(polaroidVisibilityRef.current, 0, 0.1)
     polaroidVisibilityRef.current = nextPolaroidVisibility
     polaroidApi.start({
-      position: [0, -h * (1.8 + (1 - nextPolaroidVisibility) * 2), 0],
+      position: [
+        0,
+        -h * (1.8 + (1 - nextPolaroidVisibility) * 2),
+        CAROUSEL_FORWARD,
+      ],
     })
 
     const nextWelcomeVisibility = MathUtils.lerp(
@@ -210,6 +274,8 @@ function Choose(props: ThreeElements['group']) {
         {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
         {/* @ts-ignore: https://github.com/pmndrs/react-spring/issues/1515 */}
         <animated.meshBasicMaterial
+          key={colorScheme}
+          {...inkProps}
           opacity={actionScrollOpacity}
           transparent
           map={actionScroll}
@@ -221,15 +287,31 @@ function Choose(props: ThreeElements['group']) {
         <planeGeometry
           args={[1, welcome.image.height / welcome.image.width, 1]}
         />
-        <meshBasicMaterial ref={welcomeMaterial} transparent map={welcome} />
+        <meshBasicMaterial
+          key={colorScheme}
+          {...inkProps}
+          ref={welcomeMaterial}
+          transparent
+          map={welcome}
+        />
       </mesh>
 
-      {/* Choose */}
+      {/* Choose — the carousel's card layers (see slider.tsx) draw over
+          this where they overlap it, which is intended. */}
       <mesh position={[0, -h * 1.4, 0]}>
         <planeGeometry args={[1, which.image.height / which.image.width, 1]} />
-        <meshBasicMaterial ref={whichMaterial} transparent map={which} />
+        <meshBasicMaterial
+          key={colorScheme}
+          {...inkProps}
+          ref={whichMaterial}
+          transparent
+          map={which}
+        />
       </mesh>
-      <animated.group position={polaroidPosition as unknown as Vector3}>
+      <animated.group
+        position={polaroidPosition as unknown as Vector3}
+        scale={carouselScale}
+      >
         <Slider
           items={doubledCollection}
           isDragging={isDragging}
@@ -277,6 +359,7 @@ function Choose(props: ThreeElements['group']) {
                 scale={scaleAmount}
               >
                 <Polaroid
+                  layered
                   onPointerOver={(e) => {
                     e.stopPropagation()
                     setHover(true)
@@ -302,7 +385,7 @@ function Choose(props: ThreeElements['group']) {
                   <Text
                     scale={0.25}
                     font="/fonts/redaction/Redaction_35-Italic.ttf"
-                    color="black"
+                    color={dark ? 'white' : 'black'}
                     fillOpacity={0.8}
                     anchorX="left"
                     anchorY="middle"
@@ -313,7 +396,7 @@ function Choose(props: ThreeElements['group']) {
                     scale={0.115}
                     position={[0, -0.25, 0]}
                     font="/fonts/space-mono/SpaceMono-Regular.ttf"
-                    color="#bbb"
+                    color={dark ? '#78716c' : '#bbb'}
                     anchorX="left"
                     anchorY="middle"
                   >

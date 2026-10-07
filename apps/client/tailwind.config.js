@@ -4,6 +4,9 @@ import defaultTheme from 'tailwindcss/defaultTheme'
 
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  // Toggled via a `.dark` class on <html> (see src/utils/theme.ts) rather
+  // than the `media` default, so the in-page toggle can override the OS.
+  darkMode: 'class',
   theme: {
     extend: {
       fontFamily: {
