@@ -38,7 +38,7 @@ class Predictor(BasePredictor):
             le=255,
         ),
         mask_dilation: int = Input(description="Extra dilation iterations upstream applies to the mask", default=4, ge=0),
-        resize_ratio: float = Input(description="Processing scale (output is resized back to the input size)", default=1.0, gt=0, le=1),
+        resize_ratio: float = Input(description="Processing scale (output is resized back to the input size)", default=1.0, ge=0.1, le=1),
         subvideo_length: int = Input(description="Frames per chunk for long videos (lower = less GPU memory)", default=80, ge=10),
         neighbor_length: int = Input(default=10, ge=2),
         ref_stride: int = Input(default=10, ge=1),

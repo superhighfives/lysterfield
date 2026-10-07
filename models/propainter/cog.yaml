@@ -12,13 +12,15 @@ build:
     - "ffmpeg"
     - "libgl1-mesa-glx"
     - "libglib2.0-0"
+  # No `av`: upstream only needs it (via torchvision.io.read_video) to read
+  # video files directly, and predict.py always passes frame folders. It
+  # also has no wheel here and fails to compile without FFmpeg dev headers.
   python_packages:
     - torch==2.0.1
     - torchvision==0.15.2
     - numpy==1.26.4
     - scipy==1.11.4
     - opencv-python==4.9.0.80
-    - av==11.0.0
     - addict==2.4.0
     - einops==0.7.0
     - future==1.0.0
