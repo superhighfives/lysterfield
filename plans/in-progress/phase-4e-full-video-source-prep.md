@@ -134,6 +134,30 @@ regenerate it.
 - Review tip: signatures sit in the lower-right fill area and are too
   faint for 48-up sheets. Crop `crop=464:240:560:770` at 96-up instead.
 
+### ProPainter spike (2026-10-08): not suitable for this footage
+
+- Our own Cog wrapper (`models/propainter`, pushed as private
+  `superhighfives/propainter`, version `d35f3fae…`) fixes the public
+  `jd7h/propainter` input bug and works end to end.
+- On `real-15s-60fps` (361 frames, 1024px, A100, about 7.5 min per run) the
+  output is clearly worse than flux-fill. With the pipeline's grown mask it
+  left a brown checkerboard blob. With a tight mask (raw alpha + 8
+  dilation, fp16) it left a smeared ghost of the silhouette. The subject
+  stays centred while the camera tracks them, so the background behind
+  them almost never appears in other frames for ProPainter to propagate.
+  An fp32 run failed inside upstream's script, most likely out of memory,
+  but unconfirmed because the wrapper doesn't surface subprocess output yet.
+- Compare clip: `.jobs/real-15s-60fps/legacy/propainter-spike-compare.mp4`
+  (panel 2, current panel 3, ProPainter grown mask, ProPainter tight mask).
+- Decision: keep flux-fill with the review loop as the pipeline's panel 3.
+  The wrapper stays in `models/` for footage where the background is
+  actually revealed (static camera, or a subject crossing the frame).
+- Tokens: in the user's shell `REPLICATE_API_TOKEN` is the
+  `superhighfives` token and `REPLICATE_PERSONAL_API_TOKEN` is the
+  `replicate` org token (the same one in `apps/pipeline/.env`). Bun gives
+  the shell priority over `.env`, so the pipeline has been running, and
+  billing, as `superhighfives`. The user is fixing the names on their end.
+
 ## Next steps
 
 1. Confirm the detached panel 3 run is alive (commands above) and let it
