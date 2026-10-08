@@ -158,6 +158,24 @@ regenerate it.
   the shell priority over `.env`, so the pipeline has been running, and
   billing, as `superhighfives`. The user is fixing the names on their end.
 
+### MiniMax-Remover spike (2026-10-08): promising
+
+- `ayushunleashed/minimax-remover` (public, diffusion-based video object
+  removal, video + mask video in). One run on `real-15s-60fps` (tight mask,
+  default `num_inference_steps` 6, `mask_dilation_iterations` 8, seed 42)
+  took ~19 min for 361 frames at 1024px.
+- Result: the subject is fully removed in every frame, with no ghost or
+  checkerboard, and the fill continues the boardwalk consistently across
+  the clip. Weakness: the fill is smooth and soft, less painterly than
+  the surrounding panel-2 style.
+- Compare clip: `.jobs/real-15s-60fps/legacy/minimax-spike-compare.mp4`
+  (panel 2, current flux panel 3, ProPainter tight, MiniMax).
+- Not yet tried: `num_inference_steps` 12 (sharper?), running it on the
+  grown mask, and `runwayml/aleph-2` (text-driven, 2-30s clips, optional
+  keyframe images).
+- At this speed the full song (5,156 frames) would be roughly 4-5 hours
+  of GPU time, likely in chunks. The per-run price isn't listed.
+
 ## Next steps
 
 1. Confirm the detached panel 3 run is alive (commands above) and let it
