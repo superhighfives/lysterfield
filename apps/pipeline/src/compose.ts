@@ -1,32 +1,19 @@
 import { execFile } from 'node:child_process'
-import { copyFile, mkdir } from 'node:fs/promises'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
-import { compileFramesToVideo, exists, firstFrame, videoPath, type Job } from './job.ts'
+import path from 'node:path'
+import { compileFramesToVideo, firstFrame, listFrames, videoPath, type Job } from './job.ts'
+import { AUDIO_PATH } from './resources.ts'
 
 const execFileAsync = promisify(execFile)
 
 const PANEL_SIZE = 1024
-const RESOURCES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'resources')
-
-/**
- * Fixed, non-per-scene assets — one words.mov + one audio track shared by
- * every scene. Matches the legacy `generate-videos.sh`'s literal paths
- * (`resources/words/words.mov`, `resources/audio/lysterfield-lake.wav`).
- * `WORDS_VIDEO_PATH` is the single source file; compose() copies it into
- * each job's own `1-words/` folder (see `ensureWordsPanel`) so every job
- * directory holds a folder per panel 1-7, panel 1 included, even though
- * its content never varies between jobs or takes.
- */
-export const WORDS_VIDEO_PATH = path.join(RESOURCES_DIR, 'words', 'words.mov')
-export const AUDIO_PATH = path.join(RESOURCES_DIR, 'audio', 'lysterfield-lake.wav')
-
 export interface ComposeInput {
+  /** words.ts output (panel 1) */
+  wordsFramesDir: string
   /** upscale.ts output on the raw portrait (panel 2) frames */
   portraitFramesDir: string
-  /** background-stabilize.ts output (background-plate.ts's raw fill, stepped + motion-compensated for temporal consistency — see background-stabilize.ts) */
+  /** Panel 3's final frames (`3-background/frames`): background-stabilize.ts output, or a video-removal model's output written there instead (full-video used Bria — see plans/in-progress/phase-4e-full-video-source-prep.md) */
   backgroundFramesDir: string
   matteFramesDir: string
   depthFramesDir: string
@@ -42,14 +29,19 @@ export interface ComposeInput {
 export interface ComposeResult {
   /** The uncompressed 7-panel hstack + audio mux, before compression. */
   compositeVideoPath: string
+  /** `7-dreams/<take>/final/` — every finished file for the take, in the legacy pipeline's `output/final/<id>/` format plus `hero.jpg`. */
+  finalDir: string
   videoPath: string
   videoWebmPath: string
   videoSmallPath: string
   videoSmallWebmPath: string
   /** 5s loop clip cropped from the dream panel — apps/client's choose-screen asset. */
   loopPath: string
+  loopWebmPath: string
   /** apps/client's choose-screen thumbnail, from the dream panel's first frame. */
   heroImagePath: string
+  /** `00.jpg`-`03.jpg`: four dream stills spread through the take (the legacy pipeline picked four at random). */
+  stillPaths: string[]
 }
 
 /**
@@ -59,7 +51,7 @@ export interface ComposeResult {
  * video/video-small/loop/hero compression passes.
  *
  * Each panel's compiled video lives under that panel's own numbered folder
- * (`2-portrait/video/panel.mov`, etc.) — shared across every take for
+ * (`1-words/video/panel.mov`, etc.) — shared across every take for
  * panels 1-6, since their frame inputs don't depend on which dream take is
  * selected; panel 7's compile and every output below it lives under
  * `7-dreams/<take>/` instead, since the dream frames themselves are the
@@ -68,7 +60,7 @@ export interface ComposeResult {
 export async function compose(job: Job, input: ComposeInput): Promise<ComposeResult> {
   const audioDuration = input.durationSeconds ?? (await probeDuration(AUDIO_PATH))
 
-  const wordsPanel = await ensureWordsPanel(job)
+  const wordsPanel = await normalizePanel(job, '1-words', input.wordsFramesDir, 'jpg')
   const portraitPanel = await normalizePanel(job, '2-portrait', input.portraitFramesDir, 'jpg')
   const backgroundPanel = await normalizePanel(job, '3-background', input.backgroundFramesDir, 'jpg')
   const mattePanel = await normalizePanel(job, '4-matte', input.matteFramesDir, 'png')
@@ -83,17 +75,18 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
     { fps: job.fps, duration: audioDuration }
   )
 
-  const finalVideoPath = await videoPath(job, `7-dreams/${input.take}/video`)
-  const videoWebmPath = await videoPath(job, `7-dreams/${input.take}/video`, 'webm')
+  const final = `7-dreams/${input.take}/final`
+  const finalVideoPath = await videoPath(job, `${final}/video`)
+  const videoWebmPath = await videoPath(job, `${final}/video`, 'webm')
   await compress(compositeVideoPath, finalVideoPath)
   await compress(compositeVideoPath, videoWebmPath)
 
-  const videoSmallPath = await videoPath(job, `7-dreams/${input.take}/video-small`)
-  const videoSmallWebmPath = await videoPath(job, `7-dreams/${input.take}/video-small`, 'webm')
+  const videoSmallPath = await videoPath(job, `${final}/video-small`)
+  const videoSmallWebmPath = await videoPath(job, `${final}/video-small`, 'webm')
   await compress(compositeVideoPath, videoSmallPath, { half: true })
   await compress(compositeVideoPath, videoSmallWebmPath, { half: true })
 
-  const loopPath = await videoPath(job, `7-dreams/${input.take}/loop`)
+  const loopPath = await videoPath(job, `${final}/loop`)
   await execFileAsync('ffmpeg', [
     '-y',
     '-ss',
@@ -112,17 +105,32 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
     '+faststart',
     loopPath,
   ])
+  const loopWebmPath = await videoPath(job, `${final}/loop`, 'webm')
+  await compress(loopPath, loopWebmPath)
 
   // Sourced from the dream panel, not the (take-independent) portrait
   // panel — a job's takes can look completely different from each other
   // (that's the whole point of a take), so the choose-screen thumbnail
   // needs to show each take's own dream style, not one shared image every
   // take of the same job would otherwise have in common.
-  const heroImagePath = await videoPath(job, `7-dreams/${input.take}/hero`, 'jpg')
+  const heroImagePath = await videoPath(job, `${final}/hero`, 'jpg')
   await sharp(await firstFrame(input.dreamFramesDir))
     .resize(PANEL_SIZE, PANEL_SIZE)
     .jpeg({ quality: 85 })
     .toFile(heroImagePath)
+
+  // Four stills at 20/40/60/80% through the dream, so they're spread out and
+  // stable across re-composes (the legacy pipeline picked four at random).
+  const dreamFrames = await listFrames(input.dreamFramesDir)
+  const stillPaths: string[] = []
+  for (const [n, at] of [0.2, 0.4, 0.6, 0.8].entries()) {
+    const stillPath = await videoPath(job, `${final}/${String(n).padStart(2, '0')}`, 'jpg')
+    await sharp(path.join(input.dreamFramesDir, dreamFrames[Math.floor(dreamFrames.length * at)]))
+      .resize(PANEL_SIZE, PANEL_SIZE)
+      .jpeg({ quality: 85 })
+      .toFile(stillPath)
+    stillPaths.push(stillPath)
+  }
 
   return {
     compositeVideoPath,
@@ -130,19 +138,12 @@ export async function compose(job: Job, input: ComposeInput): Promise<ComposeRes
     videoWebmPath,
     videoSmallPath,
     videoSmallWebmPath,
+    finalDir: path.join(job.dir, final),
     loopPath,
+    loopWebmPath,
     heroImagePath,
+    stillPaths,
   }
-}
-
-/** Copies the fixed, shared words.mov into this job's own `1-words/` folder (if not already there), so panel 1 has a real per-job folder like every other panel even though its content is always identical. */
-async function ensureWordsPanel(job: Job): Promise<string> {
-  const out = path.join(job.dir, '1-words', 'words.mov')
-  if (!(await exists(out))) {
-    await mkdir(path.dirname(out), { recursive: true })
-    await copyFile(WORDS_VIDEO_PATH, out)
-  }
-  return out
 }
 
 /** Compiles a frame folder into a PANEL_SIZE² square panel video — every frame-based panel is already square, so this is a plain resize, no crop. `panelDir` is the panel's own folder relative to the job root (e.g. `2-portrait`, or `7-dreams/<take>` for the one per-take panel) — its compiled video lands at `<panelDir>/video/panel.mov`. `ext` must match the frame folder's actual format (alpha/matte stays png; everything else is jpg — see init.ts). */

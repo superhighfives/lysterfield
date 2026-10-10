@@ -5,31 +5,52 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
-export interface Job {
-  /** Root working directory for this run, e.g. `.jobs/<scene-id>/`. */
-  dir: string
+/** Everything persisted in `<dir>/job.json`: the job's settings plus a record of how it was made. */
+export interface JobConfig {
   /** Frame rate used throughout this job — matches the source video's extraction rate. */
   fps: number
+  /**
+   * What `init` was given, so the job can be rebuilt from its own footage:
+   * `path` is the job's local copy of the original (relative to the job
+   * root, under `0-source/original/`), `from` is where it was copied from.
+   */
+  source?: { path: string; from?: string; offset?: number; length?: number }
+  /** Default keyframe rate for stepped steps (`background-plate`, `background-stabilize`, `dream`); `--step-fps` overrides it. */
+  stepFps?: number
+  /** Free-text note per panel folder on where its frames came from, for jobs that mix reused and generated panels. */
+  panels?: Record<string, string>
 }
 
-/** Creates a new job, persisting its metadata to `<dir>/job.json` so `loadJob` can pick it up later. */
-export async function createJob(dir: string, fps = 24): Promise<Job> {
+export interface Job extends JobConfig {
+  /** Root working directory for this run, e.g. `.jobs/<scene-id>/`. */
+  dir: string
+}
+
+/** Creates a job (or updates an existing one's `job.json`, keeping any settings not passed in) so `loadJob` can pick it up later. */
+export async function createJob(dir: string, config: JobConfig): Promise<Job> {
   await mkdir(dir, { recursive: true })
-  const job = { dir, fps }
-  await writeFile(path.join(dir, 'job.json'), JSON.stringify({ fps }))
+  const existing = (await exists(path.join(dir, 'job.json'))) ? await loadJob(dir) : { dir }
+  const job = { ...existing, ...config, dir }
+  await saveJob(job)
   return job
 }
 
 /** Loads a job previously created with `createJob` — for CLI invocations that run one step at a time. */
 export async function loadJob(dir: string): Promise<Job> {
-  const { fps } = JSON.parse(await readFile(path.join(dir, 'job.json'), 'utf8'))
-  return { dir, fps }
+  const config: JobConfig = JSON.parse(await readFile(path.join(dir, 'job.json'), 'utf8'))
+  return { ...config, dir }
+}
+
+/** Writes `job`'s settings back to its `job.json`. */
+export async function saveJob(job: Job): Promise<void> {
+  const { dir, ...config } = job
+  await writeFile(path.join(dir, 'job.json'), `${JSON.stringify(config, null, 2)}\n`)
 }
 
 /**
  * Ensures `<job.dir>/<relativePath>/` exists and returns its path. Callers
  * pass the full path relative to the job root, e.g. `framesDir(job,
- * 'source')`, `framesDir(job, '2-portrait/raw')`,
+ * '0-source/frames')`, `framesDir(job, '2-portrait/raw')`,
  * `framesDir(job, `7-dreams/${take}/frames`)` — the numbered `N-<panel>/`
  * prefix is what makes panels 1-6 naturally shared across every dream take
  * (their paths don't mention a take at all) while panel 7 naturally isn't
@@ -47,7 +68,7 @@ export async function framesDir(job: Job, relativePath: string): Promise<string>
  * Ensures the parent directory of `<job.dir>/<relativePath>.<ext>` exists
  * and returns that full file path — same "caller specifies the full
  * relative path" shape as `framesDir`, for compiled videos instead of
- * frame folders (e.g. `videoPath(job, 'video/cropped')`,
+ * frame folders (e.g. `videoPath(job, '0-source/video')`,
  * `videoPath(job, '2-portrait/video/panel')`,
  * `videoPath(job, `7-dreams/${take}/composite`)`).
  */
