@@ -220,9 +220,10 @@ subsection); their files were deleted on 2026-10-09.
   but unconfirmed because the wrapper doesn't surface subprocess output yet.
 - Compare clip: `.jobs/real-15s-60fps/legacy/propainter-spike-compare.mp4`
   (panel 2, current panel 3, ProPainter grown mask, ProPainter tight mask).
-- Decision: keep flux-fill with the review loop as the pipeline's panel 3.
-  The wrapper stays in `models/` for footage where the background is
-  actually revealed (static camera, or a subject crossing the frame).
+- Decision: keep flux-fill with the review loop as the pipeline's panel 3
+  (later replaced by Bria). The wrapper was deleted from `models/` on
+  2026-10-09; it's in git history if footage where the background is
+  actually revealed (static camera, subject crossing the frame) ever needs it.
 - Tokens: in the user's shell `REPLICATE_API_TOKEN` is the
   `superhighfives` token and `REPLICATE_PERSONAL_API_TOKEN` is the
   `replicate` org token (the same one in `apps/pipeline/.env`). Bun gives
