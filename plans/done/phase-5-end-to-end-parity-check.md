@@ -1,11 +1,32 @@
 ---
 title: "Phase 5: end-to-end run + parity check against an existing published scene"
-status: In Progress
+status: Complete
 created: 2026-08-28
-updated: 2026-08-29
+updated: 2026-10-09
 ---
 
 # Phase 5: end-to-end run + parity check against an existing published scene
+
+## Overview
+
+**Superseded, not finished as written (2026-10-09).** This plan set out to
+run the whole new chain on real footage and compare it with a published
+scene. The cheap 42-frame pass did that and recorded real per-call costs
+(below), but its open questions (artwork flicker against the originals,
+Kling dreams keeping a recognisable face, the cost of a full-length run)
+were overtaken by [phase 4e](phase-4e-full-video-source-prep.md): instead of
+regenerating panels, the full-song job reuses the legacy run's portrait,
+matte, depth and outline frames and its ten Deforum dreams, and generates
+only panel 3 (Bria). The fixed-seed flicker test's verdict was never
+recorded. Regenerating and publishing the dreams is
+[phase 4f](../ready/phase-4f-regenerate-and-publish-dreams.md).
+
+## Architecture
+
+Nothing from this plan shipped beyond what earlier phases built. Still
+useful: the per-call cost table, the `nano-banana-2` → `flux-kontext-dev`
+artwork swap and why, and the warning about retry loops against the
+Replicate API (Findings 2026-08-29).
 
 ## Goal
 

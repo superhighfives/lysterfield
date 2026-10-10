@@ -6,7 +6,7 @@ This file is the repo-specific part.
 ## Layout
 
 Bun workspaces: `apps/client` (Vite/React/R3F player) and `apps/pipeline`
-(Node/TS CLI, Replicate-driven, not yet ported — see
+(Node/TS CLI, Replicate-driven — see
 `plans/in-progress/rebuild-pipeline-as-replicate-cli.md`). Install and run
 workspace scripts from the repo root with `bun run --cwd apps/<name> <script>`.
 `bunfig.toml` pins the hoisted linker — bun's default isolated linker's
@@ -26,6 +26,21 @@ writes.
 checkout's on `git worktree add`.
 It needs `git config core.hooksPath .githooks` set once per clone. For a
 worktree that already exists, run `.githooks/post-checkout` from inside it.
+
+## Job layout
+
+A job (`apps/pipeline/.jobs/<name>/`) is `job.json` (fps, source, stepFps,
+a per-panel provenance note), `0-source/` (`original/`, `video.mov`,
+`frames/`), and one numbered folder per panel with its final frames in
+`<n>-<panel>/frames`. Each dream take is `7-dreams/<id>/` with its own
+`take.json` and a `final/` folder of publishable output. `<id>` is the
+client's dream id (readable, e.g. `lush-and-light`), and everything in the
+client keys off it. `.jobs/spikes/` holds experiment leftovers only.
+
+`.jobs/full-video` reuses the legacy run's panels (see
+`plans/done/phase-4e-full-video-source-prep.md`): the legacy `resized`
+folder had stray leftover frames, so check reused frames before feeding
+them to a model.
 
 ## Replicate calls cost money
 

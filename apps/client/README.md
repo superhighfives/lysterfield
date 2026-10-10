@@ -20,7 +20,7 @@ Client for the Lysterfield Lake project.
 You'll need to get the video files. These are available here:
 https://drive.google.com/drive/folders/15I4ll5xXZZM9p2RhYRrsui7UqELMy4YG?usp=drive_link
 
-Place them in the `dreams/` folder, so they should look like `dreams/20230808103741`, etc.
+Place them in the `dreams/` folder, so they should look like `dreams/watercolour` (the dream's id from `src/dreams.json`), etc.
 
 You'll also need to run `npm install`.
 

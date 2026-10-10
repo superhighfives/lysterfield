@@ -1,4 +1,4 @@
-import { copyFile } from 'node:fs/promises'
+import { copyFile, link, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { exists, framesDir, listFrames, type Job } from '../job.ts'
 import { MODELS } from '../models.ts'
@@ -20,8 +20,25 @@ export interface DreamOptions {
   seed?: number
 }
 
+/** A take's settings, saved to `7-dreams/<take>/take.json` so the take always remembers what made it. */
+export interface TakeConfig {
+  prompt: string
+  seed: number
+  stepFps: number
+}
+
 const DEFAULT_STEP_FPS = 6
 const DEFAULT_SEED = 42
+
+function takePath(job: Job, take: string): string {
+  return path.join(job.dir, '7-dreams', take, 'take.json')
+}
+
+/** Reads a take's saved settings, or undefined for a take that hasn't been started. */
+export async function loadTake(job: Job, take: string): Promise<TakeConfig | undefined> {
+  if (!(await exists(takePath(job, take)))) return undefined
+  return JSON.parse(await readFile(takePath(job, take), 'utf8'))
+}
 
 /**
  * Always appended to the caller-supplied prompt, never left to the caller
@@ -67,6 +84,14 @@ export async function dream(job: Job, sourceFramesDir: string, opts: DreamOption
   const interval = job.fps / stepFps
 
   const outputDir = await framesDir(job, `7-dreams/${opts.take}/frames`)
+  const saved = await loadTake(job, opts.take)
+  if (saved && (saved.prompt !== opts.prompt || saved.seed !== seed || saved.stepFps !== stepFps) && (await listFrames(outputDir)).length > 0) {
+    throw new Error(
+      `Take "${opts.take}" already has frames made with different settings (${JSON.stringify(saved)}) — use a new --take name rather than mixing two looks in one take.`
+    )
+  }
+  await writeFile(takePath(job, opts.take), `${JSON.stringify({ prompt: opts.prompt, seed, stepFps } satisfies TakeConfig, null, 2)}\n`)
+
   const frames = await listFrames(sourceFramesDir)
   if (frames.length === 0) throw new Error(`No frames found in ${sourceFramesDir}`)
 
@@ -97,13 +122,21 @@ export async function dream(job: Job, sourceFramesDir: string, opts: DreamOption
   }
   await Promise.all(Array.from({ length: concurrency }, worker))
 
-  // Hold each keyframe's output across the rest of its window.
+  // Hold each keyframe's output across the rest of its window. Held frames
+  // are hard links, not copies: the frame sequence stays complete for
+  // compose, but only the keyframes take up disk space. A link shares the
+  // keyframe's file, so replace a keyframe (delete + rewrite) rather than
+  // editing it in place, or its held frames change with it.
   for (const i of keyframeIndices) {
     const keyframeOutputPath = path.join(outputDir, frames[i])
     for (let j = i + 1; j < Math.min(i + interval, frames.length); j++) {
       const heldPath = path.join(outputDir, frames[j])
       if (!(await exists(heldPath))) {
-        await copyFile(keyframeOutputPath, heldPath)
+        await link(keyframeOutputPath, heldPath).catch((error: NodeJS.ErrnoException) => {
+          // Hard links can't cross filesystems; copy only in that case.
+          if (error.code !== 'EXDEV') throw error
+          return copyFile(keyframeOutputPath, heldPath)
+        })
       }
     }
   }

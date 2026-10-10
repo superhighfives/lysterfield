@@ -1,8 +1,8 @@
 ---
 title: Rebuild the pipeline as a single Replicate-driven CLI in a unified lysterfield repo
-status: Backlog
+status: In Progress
 created: 2026-08-16
-updated: 2026-09-24
+updated: 2026-10-09
 ---
 
 # Rebuild the pipeline as a single Replicate-driven CLI in a unified lysterfield repo
@@ -382,7 +382,10 @@ parent plan, not a substitute for per-phase specs.
 - [x] Phase 3: port `init`, `matte`, `background-plate` (derive via inpainting instead of requiring a second video), `depth`, `artwork`, `background`, `upscale` steps
 - [x] Phase 3: port `outline`, `dream` steps (post model audit)
 - [x] Phase 4: port `compose.ts` (fixed 7-panel order) + client manifest writing, dropping `dreams.py`'s lyric-baked-in lane
-- [ ] Phase 5: end-to-end run + parity check against an existing published scene
+- [x] Phase 4a-4c: compose/manifest, player and choose screen polish, frontend polish
+- [x] Phase 5: end-to-end run + parity check against an existing published scene — superseded by 4e, see `done/phase-5-end-to-end-parity-check.md`
+- [x] Phase 4e: full-song job `.jobs/full-video` — legacy panels reused, panel 3 via Bria, legacy dreams imported under readable ids, numbered job layout
+- [ ] Phase 4f: regenerate and publish all ten dreams (`ready/phase-4f-regenerate-and-publish-dreams.md`)
 - [ ] Phase 6: archive `lysterfield-lake-pipeline`
 
 ## Phase 1 notes (done 2026-08-17)

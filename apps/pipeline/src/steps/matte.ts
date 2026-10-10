@@ -20,7 +20,7 @@ export interface MatteResult {
  * (the model's default, "green-screen", is wrong for this pipeline).
  */
 export async function matte(job: Job, croppedVideoPath: string): Promise<MatteResult> {
-  const alphaVideoPath = await videoPath(job, 'video/alpha-source', 'mp4')
+  const alphaVideoPath = await videoPath(job, '4-matte/raw', 'mp4')
   if (!(await exists(alphaVideoPath))) {
     await runModelToFile(
       MODELS.robustVideoMatting,
@@ -32,7 +32,7 @@ export async function matte(job: Job, croppedVideoPath: string): Promise<MatteRe
     )
   }
 
-  const alphaFramesDir = await framesDir(job, 'alpha')
+  const alphaFramesDir = await framesDir(job, '4-matte/frames')
   let repairs: { frame: string; replacedWith: string }[] = []
   if (!(await hasFiles(alphaFramesDir))) {
     await extractFrames(alphaVideoPath, alphaFramesDir, job.fps)

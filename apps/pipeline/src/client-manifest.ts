@@ -40,6 +40,8 @@ export async function writeClientAssets(
 
   await copyFile(result.heroImagePath, path.join(assetsDir, 'hero.jpg'))
   await copyFile(result.loopPath, path.join(assetsDir, 'loop.mov'))
+  await copyFile(result.loopWebmPath, path.join(assetsDir, 'loop.webm'))
+  for (const still of result.stillPaths) await copyFile(still, path.join(assetsDir, path.basename(still)))
 
   await upsertDreamsJson(clientDir, id)
 }

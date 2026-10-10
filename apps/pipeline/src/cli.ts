@@ -8,12 +8,13 @@ import { loadJob, videoPath, type Job } from './job.ts'
 import { backgroundPlate } from './steps/background-plate.ts'
 import { stabilizeBackground } from './steps/background-stabilize.ts'
 import { depth } from './steps/depth.ts'
-import { dream } from './steps/dream.ts'
+import { dream, loadTake } from './steps/dream.ts'
 import { init } from './steps/init.ts'
 import { matte } from './steps/matte.ts'
 import { outline } from './steps/outline.ts'
 import { portrait } from './steps/portrait.ts'
 import { upscale } from './steps/upscale.ts'
+import { words } from './steps/words.ts'
 
 const DEFAULT_CLIENT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'client')
 
@@ -25,10 +26,12 @@ const DEFAULT_CLIENT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)
  *
  * Every step's input/output is addressed as a path relative to the job
  * root (see job.ts's `framesDir`/`videoPath`), following the numbered
- * per-panel folder layout: `source`/`alpha`/`video` are the job-level,
- * non-numbered folders `init`/`matte` write to; `2-portrait` through
- * `6-outline` are shared across every dream take; `7-dreams/<take>` holds
- * one take's dream frames plus its own composed/compressed output.
+ * per-panel folder layout: `0-source/` (`video.mov` + `frames/`) is the
+ * input `init` writes; each panel's final frames are `<n>-<panel>/frames`;
+ * `1-words` through `6-outline` are shared across every dream take;
+ * `7-dreams/<take>` holds one take's dream frames, its `take.json`, and
+ * its own composed/compressed output. Job-wide settings live in
+ * `job.json` (see job.ts's `JobConfig`); flags override them.
  * `--input`/`--output` (and per-step flags like `--background`/`--matte`/
  * etc. on `compose`) override the default path for that step; all defaults
  * below assume the previous step in the chain was run with its own
@@ -63,6 +66,11 @@ function outputFlag(defaultRelativePath: string): string {
 
 const concurrency = Number(flags.concurrency ?? 4)
 
+/** `--step-fps` if passed, else the job's own `stepFps` from job.json, else the step's built-in default. */
+function stepFpsFlag(job: Job): number | undefined {
+  return flags['step-fps'] ? Number(flags['step-fps']) : job.stepFps
+}
+
 switch (step) {
   case 'init': {
     const result = await init(requireFlag('job'), {
@@ -77,14 +85,14 @@ switch (step) {
 
   case 'matte': {
     const job = await loadJob(requireFlag('job'))
-    const croppedVideoPath = await videoPath(job, 'video/cropped')
-    console.log(JSON.stringify(await matte(job, croppedVideoPath), null, 2))
+    const sourceVideoPath = await videoPath(job, '0-source/video')
+    console.log(JSON.stringify(await matte(job, sourceVideoPath), null, 2))
     break
   }
 
   case 'portrait': {
     const job = await loadJob(requireFlag('job'))
-    const result = await portrait(job, frameDirFlag(job, 'source'), outputFlag('2-portrait/raw'), concurrency)
+    const result = await portrait(job, frameDirFlag(job, '0-source/frames'), outputFlag('2-portrait/raw'), concurrency)
     console.log(JSON.stringify(result, null, 2))
     break
   }
@@ -107,11 +115,11 @@ switch (step) {
     const result = await backgroundPlate(
       job,
       frameDirFlag(job, '2-portrait/upscaled', 'input'),
-      frameDirFlag(job, 'alpha', 'alpha'),
+      frameDirFlag(job, '4-matte/frames', 'alpha'),
       outputFlag('3-background/plate'),
       concurrency,
       {
-        stepFps: flags['step-fps'] ? Number(flags['step-fps']) : undefined,
+        stepFps: stepFpsFlag(job),
         regenerateLeaks: flags['regenerate-leaks'] === 'true',
       }
     )
@@ -125,9 +133,9 @@ switch (step) {
       job,
       frameDirFlag(job, '2-portrait/upscaled', 'base'),
       frameDirFlag(job, '3-background/plate', 'input'),
-      frameDirFlag(job, 'alpha', 'alpha'),
-      outputFlag('3-background/stable'),
-      { stepFps: flags['step-fps'] ? Number(flags['step-fps']) : undefined, concurrency }
+      frameDirFlag(job, '4-matte/frames', 'alpha'),
+      outputFlag('3-background/frames'),
+      { stepFps: stepFpsFlag(job), concurrency }
     )
     console.log(JSON.stringify(result, null, 2))
     break
@@ -137,8 +145,8 @@ switch (step) {
     const job = await loadJob(requireFlag('job'))
     const result = await depth(
       job,
-      frameDirFlag(job, 'source', 'source'),
-      frameDirFlag(job, 'alpha', 'alpha'),
+      frameDirFlag(job, '0-source/frames', 'source'),
+      frameDirFlag(job, '4-matte/frames', 'alpha'),
       concurrency
     )
     console.log(JSON.stringify(result, null, 2))
@@ -149,8 +157,8 @@ switch (step) {
     const job = await loadJob(requireFlag('job'))
     const result = await outline(
       job,
-      frameDirFlag(job, 'source', 'source'),
-      frameDirFlag(job, 'alpha', 'alpha'),
+      frameDirFlag(job, '0-source/frames', 'source'),
+      frameDirFlag(job, '4-matte/frames', 'alpha'),
       frameDirFlag(job, '5-depth/frames', 'depth'),
       concurrency
     )
@@ -158,15 +166,25 @@ switch (step) {
     break
   }
 
+  case 'words': {
+    const job = await loadJob(requireFlag('job'))
+    console.log(JSON.stringify(await words(job, frameDirFlag(job, '0-source/frames', 'source')), null, 2))
+    break
+  }
+
   case 'dream': {
     const job = await loadJob(requireFlag('job'))
     const take = requireFlag('take')
-    const result = await dream(job, frameDirFlag(job, 'source', 'source'), {
-      prompt: requireFlag('prompt'),
+    // Re-running an existing take picks its settings back up from take.json; flags override.
+    const saved = await loadTake(job, take)
+    const prompt = flags.prompt ?? saved?.prompt
+    if (!prompt) throw new Error(`--prompt is required for a new take ("${take}" has no take.json yet)`)
+    const result = await dream(job, frameDirFlag(job, '0-source/frames', 'source'), {
+      prompt,
       take,
-      stepFps: flags['step-fps'] ? Number(flags['step-fps']) : undefined,
+      stepFps: flags['step-fps'] ? Number(flags['step-fps']) : (saved?.stepFps ?? job.stepFps),
       concurrency,
-      seed: flags.seed ? Number(flags.seed) : undefined,
+      seed: flags.seed ? Number(flags.seed) : saved?.seed,
     })
     console.log(JSON.stringify(result, null, 2))
 
@@ -193,7 +211,7 @@ switch (step) {
 
   default:
     console.error(
-      `Usage: bun run src/cli.ts <init|matte|portrait|upscale|background-plate|background-stabilize|depth|outline|dream|compose> --job <dir> [options]`
+      `Usage: bun run src/cli.ts <init|words|matte|portrait|upscale|background-plate|background-stabilize|depth|outline|dream|compose> --job <dir> [options]`
     )
     process.exit(1)
 }
@@ -211,10 +229,13 @@ async function composeAndPublish(
   opts: { id?: string; durationSeconds?: number; skipClient?: boolean; clientDir?: string }
 ): Promise<void> {
   const id = opts.id ?? take
+  // Panel 1 is free and local, so it's made here on first compose if `words` hasn't been run yet (skipped once its frames exist).
+  const wordsResult = await words(job, frameDirFlag(job, '0-source/frames', 'source'))
   const result = await compose(job, {
+    wordsFramesDir: wordsResult.framesDir,
     portraitFramesDir: frameDirFlag(job, '2-portrait/upscaled', 'portrait'),
-    backgroundFramesDir: frameDirFlag(job, '3-background/stable', 'background'),
-    matteFramesDir: frameDirFlag(job, 'alpha', 'matte'),
+    backgroundFramesDir: frameDirFlag(job, '3-background/frames', 'background'),
+    matteFramesDir: frameDirFlag(job, '4-matte/frames', 'matte'),
     depthFramesDir: frameDirFlag(job, '5-depth/frames', 'depth'),
     outlineFramesDir: frameDirFlag(job, '6-outline/frames', 'outline'),
     take,

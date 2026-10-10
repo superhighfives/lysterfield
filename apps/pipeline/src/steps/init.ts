@@ -1,15 +1,8 @@
 import { execFile } from 'node:child_process'
+import { copyFile, mkdir, stat } from 'node:fs/promises'
+import path from 'node:path'
 import { promisify } from 'node:util'
-import {
-  compileFramesToVideo,
-  createJob,
-  exists,
-  extractFrames,
-  framesDir,
-  hasFiles,
-  videoPath,
-  type Job,
-} from '../job.ts'
+import { createJob, exists, extractFrames, framesDir, hasFiles, videoPath, type Job } from '../job.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -27,41 +20,56 @@ export interface InitOptions {
   offset?: number
   /** ffmpeg `-t` — seconds to process. */
   length?: number
-  crf?: number
 }
 
 export interface InitResult {
   job: Job
-  croppedVideoPath: string
+  /** `0-source/video.mov` — the square-cropped source at its native frame rate; `matte` sends this to Replicate as one video. */
+  sourceVideoPath: string
+  /** `0-source/frames/` — the cropped source extracted at `job.fps`; every per-frame step reads these. */
   sourceFramesDir: string
-  originalVideoPath: string
-  fullVideoPath: string
 }
 
 /**
  * Crops the source video to a square (capped at 1280px — no model this
  * pipeline calls needs more: DiffusionCLIP works at 512px, flux-fill-pro
  * caps its own output around 1264px; the legacy pipeline's 2160px cap was
- * pure waste, ~3x the pixels for no visible benefit), extracts frames, and
- * compiles two reference videos — a 1024-wide "original" and a
- * full-resolution "full". No Replicate calls.
+ * pure waste, ~3x the pixels for no visible benefit) and extracts frames,
+ * recording the source in `job.json`. No Replicate calls.
  *
  * Source frames are extracted as JPEG, not PNG — they're large,
  * photographic, and (bar `dream`'s single start-frame read) only ever feed
  * models that already tolerate real-world recompression. Every other
  * frame format decision follows from this one, since sibling directories
- * (alpha excepted — masks need exact pixel values) inherit whatever
+ * (the matte excepted — masks need exact pixel values) inherit whatever
  * extension their own source input uses.
  */
 export async function init(jobDir: string, opts: InitOptions): Promise<InitResult> {
   const fps = opts.fps ?? 24
-  const job = await createJob(jobDir, fps)
 
-  const croppedVideoPath = await videoPath(job, 'video/cropped')
-  if (!(await exists(croppedVideoPath))) {
+  // Keep an untouched copy of the original in the job, so the job never
+  // depends on wherever the footage first came from (e.g. an external drive).
+  const originalRelativePath = path.join('0-source', 'original', path.basename(opts.sourceVideoPath))
+  const originalPath = path.join(jobDir, originalRelativePath)
+  if (!(await exists(originalPath))) {
+    await mkdir(path.dirname(originalPath), { recursive: true })
+    await copyFile(opts.sourceVideoPath, originalPath)
+  } else if ((await stat(originalPath)).size !== (await stat(opts.sourceVideoPath)).size) {
+    throw new Error(
+      `${originalPath} already exists but doesn't match ${opts.sourceVideoPath}. A job holds one source; use a new job directory for a different video.`
+    )
+  }
+
+  const job = await createJob(jobDir, {
+    fps,
+    source: { path: originalRelativePath, from: path.resolve(opts.sourceVideoPath), offset: opts.offset, length: opts.length },
+  })
+
+  const sourceVideoPath = await videoPath(job, '0-source/video')
+  if (!(await exists(sourceVideoPath))) {
     const args = ['-y']
     if (opts.offset !== undefined) args.push('-ss', String(opts.offset))
-    args.push('-i', opts.sourceVideoPath)
+    args.push('-i', originalPath)
     if (opts.length !== undefined) args.push('-t', String(opts.length))
     args.push(
       '-filter:v',
@@ -69,30 +77,15 @@ export async function init(jobDir: string, opts: InitOptions): Promise<InitResul
       // crop itself at 1280 would take a zoomed-in center crop of any source
       // larger than 1280px (e.g. the legacy 2160px `main-compiled-full.mov`).
       "crop=w='min(iw\\,ih)':h='min(iw\\,ih)',scale=1280:1280,setsar=1",
-      croppedVideoPath
+      sourceVideoPath
     )
     await execFileAsync('ffmpeg', args)
   }
 
-  const sourceFramesDir = await framesDir(job, 'source')
+  const sourceFramesDir = await framesDir(job, '0-source/frames')
   if (!(await hasFiles(sourceFramesDir))) {
-    await extractFrames(croppedVideoPath, sourceFramesDir, fps, 'jpg')
+    await extractFrames(sourceVideoPath, sourceFramesDir, fps, 'jpg')
   }
 
-  const originalVideoPath = await videoPath(job, 'video/original')
-  if (!(await exists(originalVideoPath))) {
-    await compileFramesToVideo(sourceFramesDir, originalVideoPath, {
-      fps,
-      scale: '1024:-1',
-      crf: opts.crf,
-      ext: 'jpg',
-    })
-  }
-
-  const fullVideoPath = await videoPath(job, 'video/full')
-  if (!(await exists(fullVideoPath))) {
-    await compileFramesToVideo(sourceFramesDir, fullVideoPath, { fps, crf: opts.crf, ext: 'jpg' })
-  }
-
-  return { job, croppedVideoPath, sourceFramesDir, originalVideoPath, fullVideoPath }
+  return { job, sourceVideoPath, sourceFramesDir }
 }
