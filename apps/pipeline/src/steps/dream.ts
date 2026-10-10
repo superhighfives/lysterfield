@@ -124,13 +124,19 @@ export async function dream(job: Job, sourceFramesDir: string, opts: DreamOption
 
   // Hold each keyframe's output across the rest of its window. Held frames
   // are hard links, not copies: the frame sequence stays complete for
-  // compose, but only the keyframes take up disk space.
+  // compose, but only the keyframes take up disk space. A link shares the
+  // keyframe's file, so replace a keyframe (delete + rewrite) rather than
+  // editing it in place, or its held frames change with it.
   for (const i of keyframeIndices) {
     const keyframeOutputPath = path.join(outputDir, frames[i])
     for (let j = i + 1; j < Math.min(i + interval, frames.length); j++) {
       const heldPath = path.join(outputDir, frames[j])
       if (!(await exists(heldPath))) {
-        await link(keyframeOutputPath, heldPath).catch(() => copyFile(keyframeOutputPath, heldPath))
+        await link(keyframeOutputPath, heldPath).catch((error: NodeJS.ErrnoException) => {
+          // Hard links can't cross filesystems; copy only in that case.
+          if (error.code !== 'EXDEV') throw error
+          return copyFile(keyframeOutputPath, heldPath)
+        })
       }
     }
   }

@@ -20,7 +20,7 @@ import { animated, config, useSpring } from '@react-spring/three'
 import { useIdle } from '@uidotdev/usehooks'
 
 // Avatar depth, see video-material.tsx's vertex shader. Tuned by eye on
-// 20230808103741, comparing side-on renders: the depth panel is too coarse
+// watercolour (was 20230808103741), comparing side-on renders: the depth panel is too coarse
 // to push forward as-is (a head comes through as a flat plateau, which
 // extruded into a block on a pinched neck), so it's blurred across
 // DEPTH_SHAPE_RADIUS of the panel into rounded forms first, with a thin

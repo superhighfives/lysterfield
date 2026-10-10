@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { copyFile, mkdir } from 'node:fs/promises'
+import { copyFile, mkdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { createJob, exists, extractFrames, framesDir, hasFiles, videoPath, type Job } from '../job.ts'
@@ -54,6 +54,10 @@ export async function init(jobDir: string, opts: InitOptions): Promise<InitResul
   if (!(await exists(originalPath))) {
     await mkdir(path.dirname(originalPath), { recursive: true })
     await copyFile(opts.sourceVideoPath, originalPath)
+  } else if ((await stat(originalPath)).size !== (await stat(opts.sourceVideoPath)).size) {
+    throw new Error(
+      `${originalPath} already exists but doesn't match ${opts.sourceVideoPath}. A job holds one source; use a new job directory for a different video.`
+    )
   }
 
   const job = await createJob(jobDir, {
